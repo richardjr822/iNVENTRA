@@ -1,19 +1,6 @@
-export type UserRole = 'admin' | 'inventory_manager' | 'viewer';
+export * from './user';
+export * from './audit-log';
+export * from './category';
+export * from './product';
+export * from './inventory';
 
-export interface User {
-	id: string;
-	username: string;
-	password_hash: string;
-	full_name: string;
-	role: UserRole;
-	is_active: boolean;
-	created_at: string;
-	updated_at: string;
-}
-
-export interface SessionUser {
-	id: string;
-	username: string;
-	fullName: string;
-	role: UserRole;
-}

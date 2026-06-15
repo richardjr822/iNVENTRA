@@ -3,6 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { loginSchema } from '$lib/validations/login.schema';
 import { getUserByUsername, verifyPassword } from '$lib/server/auth';
 import { setSession } from '$lib/server/session';
+import { auditService } from '$lib/services/audit.service';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	// If the user is already authenticated, redirect them to the dashboard
@@ -60,6 +61,7 @@ export const actions: Actions = {
 		// 4. Compare passwords with bcrypt
 		const isPasswordValid = await verifyPassword(validPassword, user.password_hash);
 		if (!isPasswordValid) {
+			// Return a generic error message to prevent username enumeration
 			return fail(400, {
 				success: false,
 				error: 'Invalid username or password',
@@ -75,6 +77,19 @@ export const actions: Actions = {
 			role: user.role
 		});
 
+		// 5b. Log successful login
+		await auditService.log({
+			userId: user.id,
+			action: 'Login',
+			entity: 'users',
+			entityId: user.id,
+			oldData: null,
+			newData: {
+				username: user.username,
+				role: user.role
+			}
+		});
+
 		// 6. Handle post-login redirection
 		const redirectTo = url.searchParams.get('redirectTo');
 		if (redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')) {
@@ -84,3 +99,4 @@ export const actions: Actions = {
 		throw redirect(303, '/dashboard');
 	}
 };
+

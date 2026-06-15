@@ -18,7 +18,7 @@ export function encrypt(data: string): string {
 	let encrypted = cipher.update(data, 'utf8', 'hex');
 	encrypted += cipher.final('hex');
 	const tag = cipher.getAuthTag();
-	
+
 	// Format: iv:ciphertext:tag
 	return `${iv.toString('hex')}:${encrypted}:${tag.toString('hex')}`;
 }
@@ -30,14 +30,14 @@ export function decrypt(encryptedData: string): string | null {
 	try {
 		const parts = encryptedData.split(':');
 		if (parts.length !== 3) return null;
-		
+
 		const iv = Buffer.from(parts[0], 'hex');
 		const encrypted = parts[1];
 		const tag = Buffer.from(parts[2], 'hex');
-		
+
 		const decipher = crypto.createDecipheriv('aes-256-gcm', KEY, iv);
 		decipher.setAuthTag(tag);
-		
+
 		let decrypted = decipher.update(encrypted, 'hex', 'utf8');
 		decrypted += decipher.final('utf8');
 		return decrypted;
@@ -53,7 +53,7 @@ export function decrypt(encryptedData: string): string | null {
 export function setSession(cookies: Cookies, user: SessionUser): void {
 	const sessionData = JSON.stringify(user);
 	const encrypted = encrypt(sessionData);
-	
+
 	// Create secure HTTP-only cookie
 	cookies.set(COOKIE_NAME, encrypted, {
 		httpOnly: true,
@@ -70,10 +70,10 @@ export function setSession(cookies: Cookies, user: SessionUser): void {
 export function getSession(cookies: Cookies): SessionUser | null {
 	const cookieValue = cookies.get(COOKIE_NAME);
 	if (!cookieValue) return null;
-	
+
 	const decrypted = decrypt(cookieValue);
 	if (!decrypted) return null;
-	
+
 	try {
 		return JSON.parse(decrypted) as SessionUser;
 	} catch {

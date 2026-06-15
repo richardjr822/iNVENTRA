@@ -24,22 +24,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 	}
 
-	// 3. Route protection for dashboard paths
-	if (pathname.startsWith('/dashboard')) {
-		if (!sessionUser) {
-			// Redirect to login while preserving the intended destination
-			throw redirect(303, `/login?redirectTo=${encodeURIComponent(pathname)}`);
-		}
-
-		// Centralized Role-Based Access Control (RBAC) middleware checks
-		if (pathname.startsWith('/dashboard/users') || pathname.startsWith('/dashboard/settings')) {
-			if (sessionUser.role !== 'admin') {
-				// Redirect unauthorized users to dashboard with a query flag
-				throw redirect(303, '/dashboard?error=unauthorized_role');
-			}
-		}
-	}
-
 	const response = await resolve(event);
 	return response;
 };
