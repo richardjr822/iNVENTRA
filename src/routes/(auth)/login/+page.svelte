@@ -5,19 +5,37 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import { Boxes, KeyRound, Loader2, User } from '@lucide/svelte';
+	import { Boxes, KeyRound, Loader2, User, Eye, EyeOff, X } from '@lucide/svelte';
+	import { goto } from '$app/navigation';
 
 	// Svelte 5 runes for props and client-side states
 	let { form } = $props();
 
 	let loading = $state(false);
+	let showPassword = $state(false);
+	let showSuccessToast = $state(false);
+	let successRedirectUrl = $state('');
 
 	// SvelteKit form action submission enhancer
 	const handleEnhance: SubmitFunction = () => {
 		loading = true;
-		return async ({ update }) => {
-			loading = false;
-			await update();
+		return async ({ result, update }) => {
+			if (result.type === 'redirect') {
+				loading = false;
+				successRedirectUrl = result.location;
+				showSuccessToast = true;
+
+				// Auto-close and navigate in 2 seconds
+				setTimeout(() => {
+					if (showSuccessToast) {
+						showSuccessToast = false;
+						goto(successRedirectUrl);
+					}
+				}, 2000);
+			} else {
+				loading = false;
+				await update();
+			}
 		};
 	};
 </script>
@@ -138,15 +156,28 @@
 							<Input
 								id="password"
 								name="password"
-								type="password"
+								type={showPassword ? 'text' : 'password'}
 								placeholder="Enter password"
 								required
 								disabled={loading}
 								aria-invalid={form?.errors?.password ? 'true' : 'false'}
 								aria-describedby={form?.errors?.password ? 'password-error' : undefined}
-								class="h-10 pl-3 focus-visible:ring-emerald-500/50 focus-visible:border-emerald-500"
+								class="h-10 pl-3 pr-10 focus-visible:ring-emerald-500/50 focus-visible:border-emerald-500"
 								autocomplete="current-password"
 							/>
+							<button
+								type="button"
+								onclick={() => (showPassword = !showPassword)}
+								disabled={loading}
+								class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none disabled:opacity-50 cursor-pointer"
+								aria-label={showPassword ? 'Hide password' : 'Show password'}
+							>
+								{#if showPassword}
+									<EyeOff class="h-4 w-4" />
+								{:else}
+									<Eye class="h-4 w-4" />
+								{/if}
+							</button>
 						</div>
 						{#if form?.errors?.password}
 							<p
@@ -184,3 +215,36 @@
 		</Card.Root>
 	</div>
 </div>
+
+{#if showSuccessToast}
+	<!-- Backdrop with blurry background -->
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-background/30 backdrop-blur-md transition-opacity animate-in fade-in duration-300">
+		<!-- Toast Card -->
+		<div class="relative w-full max-w-sm rounded-2xl border border-emerald-500/35 bg-card/90 px-6 py-8 shadow-2xl backdrop-blur-xl animate-in zoom-in-95 duration-200 text-center space-y-4">
+			<!-- Close button -->
+			<button
+				type="button"
+				onclick={() => {
+					showSuccessToast = false;
+					goto(successRedirectUrl);
+				}}
+				class="absolute right-4 top-4 rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+				aria-label="Close message"
+			>
+				<X class="h-4 w-4" />
+			</button>
+
+			<!-- Success Icon / Check Circle -->
+			<div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+				<Boxes class="h-8 w-8 text-emerald-500 animate-bounce" />
+			</div>
+
+			<!-- Message -->
+			<div class="space-y-1">
+				<h3 class="text-xl font-extrabold tracking-tight text-foreground">Welcome to Inventra</h3>
+				<p class="text-sm font-semibold text-emerald-500/90">Authentication Successful</p>
+				<p class="text-xs text-muted-foreground pt-1.5 font-medium">Redirecting you to dashboard...</p>
+			</div>
+		</div>
+	</div>
+{/if}

@@ -46,7 +46,8 @@ export class ProductService {
 
 	async createProduct(
 		data: CreateProductInput & { id?: string },
-		createdBy: string | null
+		createdBy: string | null,
+		initialQuantity: number = 0
 	): Promise<Product> {
 		// Business validation using Zod
 		const validationResult = createProductSchema.safeParse(data);
@@ -76,7 +77,8 @@ export class ProductService {
 					id: data.id, // Support pre-generated ID
 					...validatedData
 				},
-				createdBy
+				createdBy,
+				initialQuantity
 			);
 			await auditService.log({
 				userId: createdBy,
@@ -190,6 +192,30 @@ export class ProductService {
 			throw new Error('PRODUCT_ARCHIVED');
 		}
 		return true;
+	}
+
+	async deleteProduct(id: string, userId: string | null = null): Promise<void> {
+		if (!id) throw new Error('Product ID is required');
+
+		const existingProduct = await productRepository.findById(id);
+		if (!existingProduct) {
+			throw new Error('PRODUCT_NOT_FOUND');
+		}
+
+		try {
+			await productRepository.delete(id);
+			await auditService.log({
+				userId,
+				action: 'Delete Product',
+				entity: 'products',
+				entityId: id,
+				oldData: existingProduct,
+				newData: null
+			});
+		} catch (error: unknown) {
+			const msg = error instanceof Error ? error.message : String(error);
+			throw new Error(`Failed to delete product: ${msg}`, { cause: error });
+		}
 	}
 }
 

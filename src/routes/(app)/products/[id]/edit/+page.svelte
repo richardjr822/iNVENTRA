@@ -477,8 +477,8 @@
 							id="price"
 							name="price"
 							type="number"
-							step="0.01"
-							min="0.01"
+							step="any"
+							min="0"
 							placeholder="e.g., 99.99"
 							bind:value={price}
 							disabled={loading}

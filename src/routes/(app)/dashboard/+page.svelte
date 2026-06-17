@@ -23,6 +23,7 @@
 
 	// Role detection
 	const isManager = $derived(user.role === 'inventory_manager');
+	const isViewer = $derived(user.role === 'viewer');
 
 	// ── PHP Peso formatter ─────────────────────────────────────────────────────
 	function phpFormat(n: number): string {
@@ -150,7 +151,52 @@
 	</div>
 </div>
 
-{#if isManager}
+{#if isViewer}
+<!-- Viewer KPI Cards (2 focused cards: Products, Categories) -->
+<div class="grid gap-4 sm:grid-cols-2 mb-8">
+	<!-- Total Products -->
+	<Card.Root
+		class="border-border/40 bg-card/60 shadow-sm backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+	>
+		<Card.Header class="flex flex-row items-center justify-between pb-2">
+			<Card.Title class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+				Total Products
+			</Card.Title>
+			<div
+				class="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-500"
+				aria-hidden="true"
+			>
+				<Package class="h-4 w-4" />
+			</div>
+		</Card.Header>
+		<Card.Content>
+			<div class="text-3xl font-black tracking-tight">{totalProducts}</div>
+			<p class="mt-1 text-xs text-muted-foreground">Products in catalog</p>
+		</Card.Content>
+	</Card.Root>
+
+	<!-- Total Categories -->
+	<Card.Root
+		class="border-border/40 bg-card/60 shadow-sm backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+	>
+		<Card.Header class="flex flex-row items-center justify-between pb-2">
+			<Card.Title class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+				Total Categories
+			</Card.Title>
+			<div
+				class="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500"
+				aria-hidden="true"
+			>
+				<Tags class="h-4 w-4" />
+			</div>
+		</Card.Header>
+		<Card.Content>
+			<div class="text-3xl font-black tracking-tight">{categoriesCount}</div>
+			<p class="mt-1 text-xs text-muted-foreground">Product categories</p>
+		</Card.Content>
+	</Card.Root>
+</div>
+{:else if isManager}
 <!-- Manager KPI Cards (4 focused cards: Products, Value, Low Stock, Out of Stock) -->
 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
 	<!-- Total Products -->
@@ -333,6 +379,7 @@
 </div>
 {/if}
 
+{#if !isViewer}
 <!-- 30-Day Stock Movement Trend Chart (Visual Database Insights) -->
 <Card.Root class="border-border/40 bg-card/60 shadow-sm backdrop-blur-sm mb-8">
 	<Card.Header class="pb-2 flex flex-row items-center justify-between">
@@ -466,6 +513,7 @@
 		{/if}
 	</Card.Content>
 </Card.Root>
+{/if}
 
 {#if products.length === 0}
 	<!-- Production Ready empty state handler -->
@@ -481,9 +529,49 @@
 			</Button>
 		{/if}
 	</div>
-{:else}
-	<!-- Manager Main Section: Stock health + Quick ops -->
-	{#if isManager}
+	{#if isViewer}
+	<!-- VIEW ONLY Product & Price Tracking Catalog -->
+	<Card.Root class="border-border/40 bg-card/60 shadow-sm">
+		<Card.Header>
+			<Card.Title class="text-lg font-bold">Product Pricing Catalog</Card.Title>
+			<Card.Description>Recent products and their configured tracking prices.</Card.Description>
+		</Card.Header>
+		<Card.Content>
+			<div class="overflow-x-auto rounded-xl border border-border/50">
+				<table class="w-full text-left border-collapse text-sm" aria-label="Product pricing overview">
+					<thead>
+						<tr class="border-b border-border bg-muted/30">
+							<th class="p-3 font-semibold text-xs" scope="col">Product Name</th>
+							<th class="p-3 font-semibold text-xs" scope="col">Category</th>
+							<th class="p-3 font-semibold text-xs text-right" scope="col">Price</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-border/50">
+						{#each products as product (product.id)}
+							<tr class="hover:bg-muted/10 transition-colors">
+								<td class="p-3">
+									<div class="flex items-center gap-2">
+										<div class="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-muted/40 border border-border/30">
+											<Package class="h-3.5 w-3.5 text-muted-foreground/70" />
+										</div>
+										<span class="font-bold text-sm text-foreground">{product.name}</span>
+									</div>
+								</td>
+								<td class="p-3 text-xs text-muted-foreground">{product.category}</td>
+								<td class="p-3 text-right">
+									<span class="text-base font-black text-emerald-500">{phpFormat(product.price)}</span>
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			<p class="mt-3 text-xs text-muted-foreground text-center">
+				Go to <a href="/products" class="text-primary font-bold hover:underline">Products</a> for full pricing catalog.
+			</p>
+		</Card.Content>
+	</Card.Root>
+	{:else if isManager}
 	<div class="grid gap-6 md:grid-cols-3">
 		<!-- Left: Stock health bars -->
 		<Card.Root class="border-border/40 bg-card/60 shadow-sm md:col-span-1">

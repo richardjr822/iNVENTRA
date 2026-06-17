@@ -79,7 +79,7 @@ export class ProductRepository {
 			created_at: string;
 			updated_at: string;
 			categories: { name: string } | null;
-			inventory: { quantity: number }[] | null;
+			inventory: { quantity: number }[] | { quantity: number } | null;
 		};
 
 		const products: Product[] = ((data as unknown as SupabaseProductRow[]) || []).map((p) => ({
@@ -96,7 +96,9 @@ export class ProductRepository {
 			created_at: p.created_at,
 			updated_at: p.updated_at,
 			category_name: p.categories?.name || null,
-			quantity: p.inventory?.[0]?.quantity ?? 0
+			quantity: Array.isArray(p.inventory)
+				? (p.inventory[0]?.quantity ?? 0)
+				: (p.inventory ? (p.inventory as unknown as { quantity: number }).quantity : 0)
 		}));
 
 		return {
@@ -139,7 +141,7 @@ export class ProductRepository {
 			created_at: string;
 			updated_at: string;
 			categories: { name: string } | null;
-			inventory: { quantity: number }[] | null;
+			inventory: { quantity: number }[] | { quantity: number } | null;
 		};
 
 		const p = data as unknown as SupabaseProductSingleRow;
@@ -158,7 +160,9 @@ export class ProductRepository {
 			created_at: p.created_at,
 			updated_at: p.updated_at,
 			category_name: p.categories?.name || null,
-			quantity: p.inventory?.[0]?.quantity ?? 0
+			quantity: Array.isArray(p.inventory)
+				? (p.inventory[0]?.quantity ?? 0)
+				: (p.inventory ? (p.inventory as unknown as { quantity: number }).quantity : 0)
 		};
 	}
 
@@ -194,7 +198,8 @@ export class ProductRepository {
 
 	async create(
 		productData: CreateProductInput & { id?: string },
-		createdBy: string | null
+		createdBy: string | null,
+		initialQuantity: number = 0
 	): Promise<Product> {
 		// Insert product
 		const { data: product, error: pError } = await supabase
@@ -227,10 +232,10 @@ export class ProductRepository {
 			throw new Error(`Database operation failed: ${pError.message}`);
 		}
 
-		// Insert initial inventory of 0
+		// Insert initial inventory
 		const { error: invError } = await supabase.from('inventory').insert({
 			product_id: product.id,
-			quantity: 0
+			quantity: initialQuantity
 		});
 
 		if (invError) {
@@ -240,11 +245,25 @@ export class ProductRepository {
 			throw new Error(`Failed to initialize inventory for product: ${invError.message}`);
 		}
 
+		// If initialQuantity > 0, also insert an inventory transaction
+		if (initialQuantity > 0) {
+			const { error: txError } = await supabase.from('inventory_transactions').insert({
+				product_id: product.id,
+				transaction_type: 'STOCK_IN',
+				quantity: initialQuantity,
+				remarks: 'Initial inventory on product creation',
+				created_by: createdBy
+			});
+			if (txError) {
+				console.error('Supabase error inserting initial transaction:', txError);
+			}
+		}
+
 		return {
 			...product,
 			price: Number(product.price),
 			category_name: null,
-			quantity: 0
+			quantity: initialQuantity
 		};
 	}
 
@@ -297,6 +316,38 @@ export class ProductRepository {
 		if (error) {
 			console.error('Supabase error in ProductRepository.archive:', error);
 			throw new Error(`Database operation failed: ${error.message}`);
+		}
+	}
+
+	async delete(id: string): Promise<void> {
+		const { error: txError } = await supabase
+			.from('inventory_transactions')
+			.delete()
+			.eq('product_id', id);
+
+		if (txError) {
+			console.error('Supabase error deleting inventory transactions:', txError);
+			throw new Error(`Failed to delete inventory transactions: ${txError.message}`);
+		}
+
+		const { error: invError } = await supabase
+			.from('inventory')
+			.delete()
+			.eq('product_id', id);
+
+		if (invError) {
+			console.error('Supabase error deleting inventory:', invError);
+			throw new Error(`Failed to delete inventory: ${invError.message}`);
+		}
+
+		const { error: pError } = await supabase
+			.from('products')
+			.delete()
+			.eq('id', id);
+
+		if (pError) {
+			console.error('Supabase error deleting product:', pError);
+			throw new Error(`Failed to delete product: ${pError.message}`);
 		}
 	}
 

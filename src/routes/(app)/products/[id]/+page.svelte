@@ -151,6 +151,7 @@
 				</Card.Content>
 			</Card.Root>
 
+			{#if !isViewer}
 			<!-- Stock Safety Level KPI Card -->
 			<Card.Root class="border-border/40 bg-card/65 backdrop-blur-md shadow-md">
 				<Card.Header class="pb-2">
@@ -170,6 +171,7 @@
 					</div>
 				</Card.Content>
 			</Card.Root>
+			{/if}
 		</div>
 
 		<!-- Right: Catalog Details & History Ledger -->
@@ -235,6 +237,7 @@
 				</Card.Content>
 			</Card.Root>
 
+			{#if !isViewer}
 			<!-- Historical Stock Transaction Ledger -->
 			<Card.Root class="border-border/40 bg-card/65 backdrop-blur-md shadow-lg">
 				<Card.Header>
@@ -346,6 +349,7 @@
 					</div>
 				</Card.Content>
 			</Card.Root>
+			{/if}
 		</div>
 	</div>
 </div>

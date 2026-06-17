@@ -108,6 +108,34 @@ export const actions: Actions = {
 		}
 	},
 
+	deleteProduct: async ({ request, locals }) => {
+		const sessionUser = locals.user;
+		if (
+			!sessionUser ||
+			(sessionUser.role !== 'admin' && sessionUser.role !== 'inventory_manager')
+		) {
+			return fail(403, {
+				error: 'Access Denied: You do not have permissions to perform this action.'
+			});
+		}
+
+		const formData = await request.formData();
+		const id = formData.get('id')?.toString();
+
+		if (!id) {
+			return fail(400, { error: 'Product ID is required.' });
+		}
+
+		try {
+			await productService.deleteProduct(id, sessionUser.id);
+			return { success: true };
+		} catch (err: unknown) {
+			console.error('Error deleting product in action:', err);
+			const message = err instanceof Error ? err.message : String(err);
+			return fail(500, { error: message || 'Failed to delete product.' });
+		}
+	},
+
 	// Simplified product creation for inventory_manager role
 	// Only requires name + price; auto-assigns category, SKU, and status
 	createSimple: async ({ request, locals }) => {
@@ -159,13 +187,145 @@ export const actions: Actions = {
 					description: null,
 					image_url: null
 				},
-				sessionUser.id
+				sessionUser.id,
+				10
 			);
 			return { simpleSuccess: true };
 		} catch (err: unknown) {
 			console.error('Error in createSimple product action:', err);
 			const message = err instanceof Error ? err.message : String(err);
 			return fail(500, { simpleError: message || 'Failed to create product. Please try again.' });
+		}
+	},
+
+	createBulk: async ({ request, locals }) => {
+		const sessionUser = locals.user;
+		if (!sessionUser || sessionUser.role !== 'inventory_manager') {
+			return fail(403, {
+				bulkError: 'Access Denied: Only Inventory Managers can perform this action.'
+			});
+		}
+
+		const formData = await request.formData();
+		const productsJson = formData.get('productsJson')?.toString() || '';
+		
+		let items: { name: string; price: string }[] = [];
+		try {
+			items = JSON.parse(productsJson);
+		} catch (e) {
+			return fail(400, { bulkError: 'Invalid product data format.' });
+		}
+
+		// Filter out any completely blank rows
+		const validItems = items.filter(item => item.name && item.name.trim() !== '');
+
+		if (validItems.length === 0) {
+			return fail(400, { bulkError: 'Please provide at least one product name.' });
+		}
+
+		// Validate each item
+		for (const item of validItems) {
+			const price = parseFloat(item.price);
+			if (!item.name.trim()) {
+				return fail(400, { bulkError: 'All products must have a name.' });
+			}
+			if (isNaN(price) || price <= 0) {
+				return fail(400, { bulkError: `Product "${item.name}" must have a valid selling price greater than 0.` });
+			}
+		}
+
+		// Resolve (or create) the "Tinda" category
+		let tindaCategory = await categoryRepository.findByName('Tinda');
+		if (!tindaCategory) {
+			tindaCategory = await categoryRepository.create('Tinda', 'Default category for retail store products');
+		}
+
+		// Create products
+		try {
+			for (let i = 0; i < validItems.length; i++) {
+				const item = validItems[i];
+				const price = parseFloat(item.price);
+				const autoSku = `TINDA-${Date.now()}-${i}`; // Append index to avoid SKU collision
+
+				await productService.createProduct(
+					{
+						sku: autoSku,
+						name: item.name.trim(),
+						price,
+						category_id: tindaCategory.id,
+						status: 'active',
+						barcode: null,
+						description: null,
+						image_url: null
+					},
+					sessionUser.id,
+					10 // Default stock to 10
+				);
+			}
+
+			return { bulkSuccess: true };
+		} catch (err: unknown) {
+			console.error('Error in createBulk product action:', err);
+			const message = err instanceof Error ? err.message : String(err);
+			return fail(500, { bulkError: message || 'Failed to create products. Please try again.' });
+		}
+	},
+
+	updateSimple: async ({ request, locals }) => {
+		const sessionUser = locals.user;
+		if (!sessionUser || sessionUser.role !== 'inventory_manager') {
+			return fail(403, {
+				editError: 'Access Denied: Only Inventory Managers can perform this action.'
+			});
+		}
+
+		const formData = await request.formData();
+		const id = formData.get('id')?.toString() || '';
+		const name = formData.get('name')?.toString().trim() || '';
+		const priceStr = formData.get('price')?.toString() || '';
+		const price = parseFloat(priceStr);
+
+		if (!id) {
+			return fail(400, { editError: 'Product ID is required.' });
+		}
+		if (!name) {
+			return fail(400, { editError: 'Product name is required.' });
+		}
+		if (isNaN(price) || price <= 0) {
+			return fail(400, { editError: 'A valid selling price is required.' });
+		}
+
+		try {
+			// Retrieve existing product details to retain non-simple metadata
+			const existingProduct = await productService.getProductById(id);
+
+			let categoryId = existingProduct.category_id;
+			if (!categoryId) {
+				const tindaCategory = await categoryRepository.findByName('Tinda') || 
+					await categoryRepository.create('Tinda', 'Default category for retail store products');
+				categoryId = tindaCategory.id;
+			}
+
+			await productService.updateProduct(
+				id,
+				{
+					sku: existingProduct.sku,
+					name,
+					price,
+					category_id: categoryId,
+					status: existingProduct.status,
+					barcode: existingProduct.barcode,
+					description: existingProduct.description,
+					image_url: existingProduct.image_url
+				},
+				sessionUser.id
+			);
+
+			return { editSuccess: true };
+		} catch (err: unknown) {
+			console.error('Error in updateSimple product action:', err);
+			const message = err instanceof Error ? err.message : String(err);
+			return fail(500, { editError: message || 'Failed to update product. Please try again.' });
 		}
 	}
 };

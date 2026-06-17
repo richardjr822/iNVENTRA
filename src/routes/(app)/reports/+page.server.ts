@@ -1,9 +1,15 @@
+import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { sql } from '$lib/server/db';
-
+ 
 export const load: PageServerLoad = async ({ parent }) => {
 	const parentData = await parent();
 	const user = parentData.user;
+ 
+	// Guard: Viewers are not allowed to view reports
+	if (user.role === 'viewer') {
+		throw redirect(303, '/dashboard?error=unauthorized_role');
+	}
 
 	try {
 		// 1. Fetch current active products and their stock quantities

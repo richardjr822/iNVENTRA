@@ -1,12 +1,16 @@
+import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { inventoryService } from '$lib/services/inventory.service';
 import { categoryService } from '$lib/services/category.service';
-
+ 
 export const load: PageServerLoad = async ({ parent, url }) => {
 	const parentData = await parent();
 	const user = parentData.user;
-
-	// Viewers, inventory_managers, and admins can view the inventory catalog list
+ 
+	// Guard: Viewers are not allowed to view the inventory catalog list
+	if (user.role === 'viewer') {
+		throw redirect(303, '/dashboard?error=unauthorized_role');
+	}
 	const search = url.searchParams.get('q') || '';
 	const categoryId = url.searchParams.get('categoryId') || 'all';
 	const status = url.searchParams.get('status') || 'all';

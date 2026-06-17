@@ -10,13 +10,13 @@
 		$props();
 
 	type ThemeMode = 'light' | 'dark' | 'system';
-	let theme = $state<ThemeMode>('system');
+	let theme = $state<ThemeMode>('light');
 	let mounted = $state(false);
 
 	onMount(() => {
 		mounted = true;
 		const saved = localStorage.getItem('theme') as ThemeMode | null;
-		theme = saved ?? 'system';
+		theme = saved ?? 'light';
 		applyTheme(theme);
 	});
 
@@ -40,11 +40,7 @@
 	function cycleTheme() {
 		const next: ThemeMode = theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light';
 		theme = next;
-		if (next === 'system') {
-			localStorage.removeItem('theme');
-		} else {
-			localStorage.setItem('theme', next);
-		}
+		localStorage.setItem('theme', next);
 		applyTheme(next);
 	}
 

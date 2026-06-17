@@ -1,10 +1,15 @@
-import { fail } from '@sveltejs/kit';
+import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { categoryService } from '$lib/services/category.service';
-
+ 
 export const load: PageServerLoad = async ({ parent, url }) => {
 	const parentData = await parent();
 	const user = parentData.user;
+ 
+	// Guard: Viewers are not allowed to view categories page
+	if (user.role === 'viewer') {
+		throw redirect(303, '/dashboard?error=unauthorized_role');
+	}
 
 	// Viewer, inventory_manager, and admin are all permitted to view this list page
 
