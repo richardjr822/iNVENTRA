@@ -35,7 +35,7 @@
 		},
 		{
 			label: 'Products',
-			description: 'Manage product catalog and SKUs',
+			description: 'Manage product pricing catalog',
 			href: '/products',
 			icon: Package,
 			category: 'Navigation',
@@ -43,91 +43,11 @@
 		},
 		{
 			label: 'Add Product',
-			description: 'Create a new product entry',
+			description: 'Create a new product price profile',
 			href: '/products/create',
 			icon: Package,
 			category: 'Actions',
 			roles: ['admin', 'inventory_manager']
-		},
-		{
-			label: 'Categories',
-			description: 'Manage product categories',
-			href: '/categories',
-			icon: Tags,
-			category: 'Navigation',
-			roles: ['admin', 'inventory_manager', 'viewer']
-		},
-		{
-			label: 'Add Category',
-			description: 'Create a new category',
-			href: '/categories/create',
-			icon: Tags,
-			category: 'Actions',
-			roles: ['admin', 'inventory_manager']
-		},
-		{
-			label: 'Inventory',
-			description: 'Monitor warehouse quantities and stock levels',
-			href: '/inventory',
-			icon: Boxes,
-			category: 'Navigation',
-			roles: ['admin', 'inventory_manager', 'viewer']
-		},
-		{
-			label: 'Stock In',
-			description: 'Record incoming stock',
-			href: '/inventory/stock-in',
-			icon: Boxes,
-			category: 'Inventory Actions',
-			roles: ['admin', 'inventory_manager']
-		},
-		{
-			label: 'Stock Out',
-			description: 'Record outgoing stock',
-			href: '/inventory/stock-out',
-			icon: Boxes,
-			category: 'Inventory Actions',
-			roles: ['admin', 'inventory_manager']
-		},
-		{
-			label: 'Adjustment',
-			description: 'Manual inventory adjustment',
-			href: '/inventory/adjustment',
-			icon: Boxes,
-			category: 'Inventory Actions',
-			roles: ['admin', 'inventory_manager']
-		},
-		{
-			label: 'Damaged Items',
-			description: 'Log damaged or written-off stock',
-			href: '/inventory/damaged',
-			icon: Boxes,
-			category: 'Inventory Actions',
-			roles: ['admin', 'inventory_manager']
-		},
-		{
-			label: 'Returns',
-			description: 'Process returned goods',
-			href: '/inventory/returns',
-			icon: Boxes,
-			category: 'Inventory Actions',
-			roles: ['admin', 'inventory_manager']
-		},
-		{
-			label: 'Transaction History',
-			description: 'View all inventory transactions',
-			href: '/inventory/transactions',
-			icon: History,
-			category: 'Navigation',
-			roles: ['admin', 'inventory_manager', 'viewer']
-		},
-		{
-			label: 'Reports',
-			description: 'Download reports and analytics',
-			href: '/reports',
-			icon: FileText,
-			category: 'Navigation',
-			roles: ['admin', 'inventory_manager', 'viewer']
 		},
 		{
 			label: 'Audit Logs',

@@ -1,7 +1,6 @@
 import { redirect, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { productService } from '$lib/services/product.service';
-import { categoryService } from '$lib/services/category.service';
 import { updateProductSchema } from '$lib/validations/product.schema';
 
 export const load: PageServerLoad = async ({ parent, params }) => {
@@ -19,20 +18,11 @@ export const load: PageServerLoad = async ({ parent, params }) => {
 	}
 
 	try {
-		// Load product details and category list in parallel
-		const [product, { categories }] = await Promise.all([
-			productService.getProductById(id),
-			categoryService.getCategories({
-				limit: 100,
-				sortBy: 'name',
-				sortOrder: 'asc'
-			})
-		]);
+		const product = await productService.getProductById(id);
 
 		return {
 			user,
-			product,
-			categories
+			product
 		};
 	} catch (err: unknown) {
 		console.error('Error loading product edit page:', err);
@@ -59,25 +49,31 @@ export const actions: Actions = {
 		}
 
 		const formData = await request.formData();
-		const sku = formData.get('sku')?.toString() || '';
-		const barcode = formData.get('barcode')?.toString() || '';
 		const name = formData.get('name')?.toString() || '';
-		const category_id = formData.get('category_id')?.toString() || '';
 		const description = formData.get('description')?.toString() || '';
-		const priceStr = formData.get('price')?.toString() || '';
 		const status = formData.get('status')?.toString() || '';
 		const image_url = formData.get('image_url')?.toString() || '';
+		const variantsJson = formData.get('variantsJson')?.toString() || '';
 
-		const price = priceStr ? Number(priceStr) : NaN;
+		let variants: { quantity: number; price: number }[] = [];
+		try {
+			const parsed = JSON.parse(variantsJson);
+			if (Array.isArray(parsed)) {
+				variants = parsed.map((v) => ({
+					quantity: v.quantity === '' || v.quantity === undefined ? NaN : Number(v.quantity),
+					price: v.price === '' || v.price === undefined ? NaN : Number(v.price)
+				}));
+			}
+		} catch (e) {
+			return fail(400, { error: 'Invalid variants data format.' });
+		}
+
 		const values = {
-			sku,
-			barcode: barcode || null,
 			name,
-			category_id,
 			description: description || null,
-			price: isNaN(price) ? priceStr : price,
 			status,
-			image_url: image_url || null
+			image_url: image_url || null,
+			variants
 		};
 
 		// Perform server-side validation using Zod
@@ -87,7 +83,11 @@ export const actions: Actions = {
 			for (const issue of validationResult.error.issues) {
 				const path = issue.path[0]?.toString();
 				if (path && path !== 'id') {
-					fieldErrors[path] = issue.message;
+					if (issue.path[0] === 'variants') {
+						fieldErrors['variants'] = issue.message;
+					} else {
+						fieldErrors[path] = issue.message;
+					}
 				}
 			}
 			return fail(400, { errors: fieldErrors, values });
@@ -97,24 +97,6 @@ export const actions: Actions = {
 			await productService.updateProduct(id, validationResult.data, sessionUser.id);
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err);
-
-			if (message === 'DUPLICATE_SKU') {
-				return fail(400, {
-					errors: {
-						sku: 'SKU must be unique. A product with this SKU already exists.'
-					},
-					values
-				});
-			}
-
-			if (message === 'DUPLICATE_BARCODE') {
-				return fail(400, {
-					errors: {
-						barcode: 'Barcode must be unique. A product with this barcode already exists.'
-					},
-					values
-				});
-			}
 
 			if (message === 'PRODUCT_NOT_FOUND') {
 				return fail(404, {

@@ -6,56 +6,49 @@
 		ArrowLeft,
 		Edit2,
 		Package,
-		TrendingUp,
-		FileText,
 		Calendar,
-		User,
 		Info,
-		PlusCircle,
-		MinusCircle
+		Layers
 	} from '@lucide/svelte';
 
 	let { data } = $props();
 	const product = $derived(data.product);
-	const transactions = $derived(data.transactions);
 	const user = $derived(data.user);
 
-	// Derived stock safety status properties
-	const stockQty = $derived(product.quantity || 0);
-	const stockStatus = $derived(() => {
-		if (stockQty <= 0) {
-			return {
-				label: 'Out of Stock',
-				bg: 'bg-red-500/10 text-red-500 border-red-500/20',
-				dot: 'bg-red-500'
-			};
-		} else if (stockQty <= 10) {
-			return {
-				label: 'Low Stock',
-				bg: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
-				dot: 'bg-amber-500'
-			};
-		} else {
-			return {
-				label: 'In Stock',
-				bg: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
-				dot: 'bg-emerald-500'
-			};
-		}
-	});
+	// Role-based action detection
+	const isManager = $derived(user.role === 'admin' || user.role === 'inventory_manager');
 
-	const isViewer = $derived(user.role === 'viewer');
+	// Peso formatter
+	function phpFormat(n: number): string {
+		return '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+	}
+
+	// Format date
+	function formatFullDate(dateStr: string): string {
+		try {
+			return new Date(dateStr).toLocaleString(undefined, {
+				weekday: 'short',
+				year: 'numeric',
+				month: 'long',
+				day: 'numeric',
+				hour: '2-digit',
+				minute: '2-digit'
+			});
+		} catch {
+			return dateStr;
+		}
+	}
 </script>
 
 <svelte:head>
-	<title>{product.name} - Product Details - Inventra</title>
+	<title>{product.name} - Product Details - Price Monitoring System</title>
 	<meta
 		name="description"
-		content="View product catalog profile, pricing, identifiers, current stock safety status, and historical ledger transactions."
+		content="View product information and configured quantity-price variants."
 	/>
 </svelte:head>
 
-<div class="max-w-6xl mx-auto space-y-6">
+<div class="max-w-4xl mx-auto space-y-6">
 	<!-- Navigation and Action bar -->
 	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<div>
@@ -68,7 +61,7 @@
 			</a>
 		</div>
 
-		{#if !isViewer && product.status !== 'archived'}
+		{#if isManager && product.status !== 'archived'}
 			<Button
 				href="/products/{product.id}/edit"
 				class="bg-primary text-primary-foreground hover:bg-primary/90 font-bold shrink-0 cursor-pointer shadow-sm shadow-primary/15"
@@ -80,10 +73,9 @@
 	</div>
 
 	<!-- Main Details Grid Layout -->
-	<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-		<!-- Left: Image & Quick KPI Cards -->
-		<div class="space-y-6 lg:col-span-1">
-			<!-- Image Card -->
+	<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+		<!-- Left side: Photo card -->
+		<div class="md:col-span-1">
 			<Card.Root class="border-border/40 bg-card/65 backdrop-blur-md overflow-hidden shadow-lg">
 				<div
 					class="aspect-square relative flex items-center justify-center bg-muted/30 border-b border-border/40"
@@ -100,7 +92,7 @@
 					{:else}
 						<div class="flex flex-col items-center gap-2 text-muted-foreground/60 select-none">
 							<Package class="h-16 w-16" />
-							<span class="text-xs font-bold">No Image Provided</span>
+							<span class="text-xs font-bold">No Photo</span>
 						</div>
 					{/if}
 
@@ -127,62 +119,18 @@
 						{/if}
 					</div>
 				</div>
-
-				<Card.Content class="p-5 space-y-4">
-					<div>
-						<h3 class="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-							Product SKU
-						</h3>
-						<p class="font-mono text-base font-black text-foreground select-all mt-0.5">
-							{product.sku}
-						</p>
-					</div>
-
-					{#if product.barcode}
-						<div>
-							<h3 class="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-								Barcode (UPC/EAN)
-							</h3>
-							<p class="font-mono text-sm font-semibold text-muted-foreground mt-0.5">
-								{product.barcode}
-							</p>
-						</div>
-					{/if}
-				</Card.Content>
 			</Card.Root>
-
-			{#if !isViewer}
-			<!-- Stock Safety Level KPI Card -->
-			<Card.Root class="border-border/40 bg-card/65 backdrop-blur-md shadow-md">
-				<Card.Header class="pb-2">
-					<Card.Title class="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-						Stock Safety Level
-					</Card.Title>
-				</Card.Header>
-				<Card.Content class="space-y-4">
-					<div class="flex items-baseline justify-between">
-						<span class="text-4xl font-black tracking-tight">{stockQty}</span>
-						<span class="text-xs font-bold text-muted-foreground">Units Available</span>
-					</div>
-
-					<div class="flex items-center gap-2 rounded-xl border p-3.5 {stockStatus().bg}">
-						<span class="h-2.5 w-2.5 rounded-full {stockStatus().dot} animate-pulse"></span>
-						<span class="text-xs font-black uppercase tracking-wider">{stockStatus().label}</span>
-					</div>
-				</Card.Content>
-			</Card.Root>
-			{/if}
 		</div>
 
-		<!-- Right: Catalog Details & History Ledger -->
-		<div class="space-y-6 lg:col-span-2">
-			<!-- Product Catalog Specifications Profile -->
+		<!-- Right side: Specifications Profile & Variant List -->
+		<div class="md:col-span-2 space-y-6">
+			<!-- Profile specifications card -->
 			<Card.Root class="border-border/40 bg-card/65 backdrop-blur-md shadow-lg">
 				<Card.Header>
-					<Card.Title class="text-lg font-bold">Catalog Profile</Card.Title>
-					<Card.Description class="text-sm">Specifications and taxonomy details.</Card.Description>
+					<Card.Title class="text-lg font-bold">Product Profile</Card.Title>
+					<Card.Description class="text-sm">General specifications and price details.</Card.Description>
 				</Card.Header>
-				<Card.Content class="space-y-5">
+				<Card.Content class="space-y-4">
 					<div class="grid grid-cols-3 items-center border-b border-border/30 pb-3">
 						<span class="text-sm font-bold text-muted-foreground flex items-center gap-1.5">
 							<Package class="h-4 w-4 shrink-0" /> Product Name
@@ -192,164 +140,68 @@
 
 					<div class="grid grid-cols-3 items-center border-b border-border/30 pb-3">
 						<span class="text-sm font-bold text-muted-foreground flex items-center gap-1.5">
-							<Info class="h-4 w-4 shrink-0" /> Category
-						</span>
-						<span class="col-span-2 text-sm font-bold text-foreground">
-							{product.category_name || '—'}
-						</span>
-					</div>
-
-					<div class="grid grid-cols-3 items-center border-b border-border/30 pb-3">
-						<span class="text-sm font-bold text-muted-foreground flex items-center gap-1.5">
-							<TrendingUp class="h-4 w-4 shrink-0" /> Unit Price (USD)
-						</span>
-						<span class="col-span-2 text-sm font-mono font-black text-emerald-500">
-							${Number(product.price).toFixed(2)}
-						</span>
-					</div>
-
-					<div class="grid grid-cols-3 items-center border-b border-border/30 pb-3">
-						<span class="text-sm font-bold text-muted-foreground flex items-center gap-1.5">
-							<Calendar class="h-4 w-4 shrink-0" /> Created Date
+							<Calendar class="h-4 w-4 shrink-0" /> Last Updated
 						</span>
 						<span class="col-span-2 text-xs font-mono text-muted-foreground">
-							{new Date(product.created_at).toLocaleString(undefined, {
-								weekday: 'short',
-								year: 'numeric',
-								month: 'long',
-								day: 'numeric',
-								hour: '2-digit',
-								minute: '2-digit'
-							})}
+							{formatFullDate(product.updated_at)}
 						</span>
 					</div>
 
-					<div class="space-y-2">
-						<span class="text-sm font-bold text-muted-foreground flex items-center gap-1.5">
-							<FileText class="h-4 w-4 shrink-0" /> Product Description
-						</span>
-						<p
-							class="text-sm text-foreground leading-relaxed bg-background/40 border border-border/40 p-4 rounded-xl whitespace-pre-wrap min-h-[80px]"
-						>
-							{product.description || 'No description provided.'}
-						</p>
-					</div>
+					{#if product.description}
+						<div class="space-y-2 pt-1">
+							<span class="text-sm font-bold text-muted-foreground flex items-center gap-1.5">
+								<Info class="h-4 w-4 shrink-0" /> Product Description
+							</span>
+							<p
+								class="text-sm text-foreground leading-relaxed bg-background/40 border border-border/40 p-4 rounded-xl whitespace-pre-wrap min-h-[60px]"
+							>
+								{product.description}
+							</p>
+						</div>
+					{/if}
 				</Card.Content>
 			</Card.Root>
 
-			{#if !isViewer}
-			<!-- Historical Stock Transaction Ledger -->
+			<!-- Variants pricing card -->
 			<Card.Root class="border-border/40 bg-card/65 backdrop-blur-md shadow-lg">
-				<Card.Header>
-					<Card.Title class="text-lg font-bold">Recent Stock movements</Card.Title>
-					<Card.Description class="text-sm"
-						>Historical ledger transactions of stock entries and dispatches.</Card.Description
-					>
+				<Card.Header class="pb-2">
+					<div class="flex items-center gap-2">
+						<Layers class="h-5 w-5 text-emerald-500" />
+						<Card.Title class="text-lg font-bold">Quantity Price Variants</Card.Title>
+					</div>
+					<Card.Description class="text-sm">Configured selling prices for quantity batches.</Card.Description>
 				</Card.Header>
-				<Card.Content>
-					<div class="overflow-x-auto rounded-xl border border-border/50">
-						<table class="w-full text-left border-collapse text-sm">
+				<Card.Content class="pt-4">
+					<div class="border border-border/40 rounded-xl overflow-hidden bg-background/25">
+						<table class="w-full text-left border-collapse text-sm" aria-label="Product quantity price variants overview">
 							<thead>
-								<tr class="border-b border-border bg-muted/30">
-									<th class="p-3 font-bold text-xs uppercase text-muted-foreground tracking-wider"
-										>Date</th
-									>
-									<th class="p-3 font-bold text-xs uppercase text-muted-foreground tracking-wider"
-										>Type</th
-									>
-									<th
-										class="p-3 font-bold text-xs uppercase text-muted-foreground tracking-wider text-right"
-										>Qty</th
-									>
-									<th class="p-3 font-bold text-xs uppercase text-muted-foreground tracking-wider"
-										>Logged By</th
-									>
-									<th class="p-3 font-bold text-xs uppercase text-muted-foreground tracking-wider"
-										>Remarks</th
-									>
+								<tr class="border-b border-border bg-muted/40 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+									<th class="p-3">Quantity</th>
+									<th class="p-3 text-right">Price</th>
 								</tr>
 							</thead>
-							<tbody class="divide-y divide-border/50">
-								{#if transactions.length > 0}
-									{#each transactions as tx (tx.id)}
-										<tr class="hover:bg-muted/10 transition-colors">
-											<!-- Date -->
-											<td class="p-3 text-xs font-mono text-muted-foreground whitespace-nowrap">
-												{new Date(tx.created_at).toLocaleDateString(undefined, {
-													month: 'short',
-													day: 'numeric',
-													hour: '2-digit',
-													minute: '2-digit'
-												})}
-											</td>
-
-											<!-- Type -->
-											<td class="p-3 text-xs">
-												{#if tx.transaction_type === 'STOCK_IN' || tx.transaction_type === 'RETURN'}
-													<span class="inline-flex items-center gap-1 font-bold text-emerald-500">
-														<PlusCircle class="h-3.5 w-3.5" />
-														{tx.transaction_type === 'STOCK_IN' ? 'Stock In' : 'Return'}
-													</span>
-												{:else if tx.transaction_type === 'STOCK_OUT' || tx.transaction_type === 'DAMAGED'}
-													<span class="inline-flex items-center gap-1 font-bold text-red-500">
-														<MinusCircle class="h-3.5 w-3.5" />
-														{tx.transaction_type === 'STOCK_OUT' ? 'Stock Out' : 'Damaged'}
-													</span>
-												{:else}
-													<span class="inline-flex items-center gap-1 font-bold text-blue-500">
-														<Info class="h-3.5 w-3.5" /> Adjustment
-													</span>
-												{/if}
-											</td>
-
-											<!-- Qty -->
-											<td class="p-3 text-xs font-bold text-right whitespace-nowrap">
-												<span
-													class={['STOCK_IN', 'RETURN'].includes(tx.transaction_type)
-														? 'text-emerald-500'
-														: ['STOCK_OUT', 'DAMAGED'].includes(tx.transaction_type)
-															? 'text-red-500'
-															: 'text-blue-500'}
-												>
-													{['STOCK_IN', 'RETURN'].includes(tx.transaction_type) ? '+' : ''}
-													{['STOCK_OUT', 'DAMAGED'].includes(tx.transaction_type) ? '-' : ''}
-													{tx.quantity}
-												</span>
-											</td>
-
-											<!-- Logged By -->
-											<td class="p-3 text-xs text-muted-foreground">
-												<span class="inline-flex items-center gap-1 font-semibold text-foreground">
-													<User class="h-3.5 w-3.5 text-muted-foreground/60" />
-													{tx.user_full_name || 'System'}
-												</span>
-											</td>
-
-											<!-- Remarks -->
-											<td
-												class="p-3 text-xs text-muted-foreground truncate max-w-[200px]"
-												title={tx.remarks}
-											>
-												{tx.remarks || '—'}
-											</td>
-										</tr>
-									{/each}
-								{:else}
-									<tr>
-										<td
-											colspan="5"
-											class="p-8 text-center text-xs font-semibold text-muted-foreground"
-										>
-											No stock movements logged for this product.
+							<tbody class="divide-y divide-border/30">
+								{#each product.variants || [] as variant}
+									<tr class="hover:bg-muted/10 transition-colors">
+										<td class="p-3 font-semibold text-foreground">
+											{variant.quantity} {variant.quantity === 1 ? 'piece' : 'pieces'}
+										</td>
+										<td class="p-3 text-right">
+											<span class="text-base font-black text-emerald-500">{phpFormat(variant.price)}</span>
 										</td>
 									</tr>
-								{/if}
+								{:else}
+									<tr>
+										<td colspan="2" class="p-4 text-center text-xs font-semibold text-muted-foreground italic">
+											No quantity price variants configured.
+										</td>
+									</tr>
+								{/each}
 							</tbody>
 						</table>
 					</div>
 				</Card.Content>
 			</Card.Root>
-			{/if}
 		</div>
 	</div>
 </div>

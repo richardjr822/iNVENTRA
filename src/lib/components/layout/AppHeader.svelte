@@ -62,10 +62,15 @@
 		{ label: 'Inventra', href: '/dashboard' },
 		...pathParts.map((part, index) => {
 			const href = '/' + pathParts.slice(0, index + 1).join('/');
-			const label = part
-				.split('-')
-				.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-				.join(' ');
+			let label = part;
+			if (page.data.product && page.data.product.id === part) {
+				label = page.data.product.name;
+			} else {
+				label = part
+					.split('-')
+					.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+					.join(' ');
+			}
 			return { label, href };
 		})
 	]);

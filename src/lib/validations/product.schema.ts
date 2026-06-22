@@ -1,28 +1,11 @@
 import { z } from 'zod';
 
 export const createProductSchema = z.object({
-	sku: z.string().trim().min(1, 'SKU is required').max(50, 'SKU must be 50 characters or less'),
-	barcode: z
-		.string()
-		.trim()
-		.max(50, 'Barcode must be 50 characters or less')
-		.optional()
-		.nullable()
-		.or(z.literal(''))
-		.transform((val) => (val === '' || val === undefined ? null : val)),
 	name: z
 		.string()
 		.trim()
 		.min(1, 'Product name is required')
 		.max(255, 'Product name must be 255 characters or less'),
-	price: z
-		.number({ message: 'Price is required and must be a number' })
-		.positive('Price must be greater than 0'),
-	category_id: z
-		.string()
-		.trim()
-		.uuid('Invalid category ID selection')
-		.min(1, 'Category is required'),
 	description: z
 		.string()
 		.trim()
@@ -41,7 +24,20 @@ export const createProductSchema = z.object({
 		.optional()
 		.nullable()
 		.or(z.literal(''))
-		.transform((val) => (val === '' || val === undefined ? null : val))
+		.transform((val) => (val === '' || val === undefined ? null : val)),
+	variants: z
+		.array(
+			z.object({
+				quantity: z
+					.number({ message: 'Quantity is required' })
+					.int('Quantity must be an integer')
+					.positive('Quantity must be greater than 0'),
+				price: z
+					.number({ message: 'Price is required' })
+					.min(0, 'Price must be 0 or greater')
+			})
+		)
+		.min(1, 'At least one quantity-price variant is required')
 });
 
 export type CreateProductSchema = typeof createProductSchema;
@@ -56,3 +52,4 @@ export const updateProductSchema = createProductSchema.extend({
 
 export type UpdateProductSchema = typeof updateProductSchema;
 export type UpdateProductInput = z.infer<UpdateProductSchema>;
+

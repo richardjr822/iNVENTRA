@@ -1,25 +1,20 @@
 import { supabase } from '$lib/server/supabase';
 import type {
 	Product,
-	InventoryTransaction,
-	InventoryTransactionType,
 	CreateProductInput,
-	UpdateProductInput
+	UpdateProductInput,
+	ProductVariant
 } from '$lib/types';
 
 export class ProductRepository {
 	async findAll(options?: {
 		search?: string;
-		categoryId?: string;
-		status?: string;
 		sortBy?: 'name' | 'sku' | 'price' | 'created_at';
 		sortOrder?: 'asc' | 'desc';
 		page?: number;
 		limit?: number;
 	}): Promise<{ products: Product[]; totalCount: number }> {
 		const search = options?.search?.trim() || '';
-		const categoryId = options?.categoryId;
-		const status = options?.status;
 		const sortBy = options?.sortBy || 'name';
 		const sortOrder = options?.sortOrder || 'asc';
 		const page = options?.page || 1;
@@ -30,26 +25,17 @@ export class ProductRepository {
 		let query = supabase.from('products').select(
 			`
 				*,
-				categories (name),
-				inventory (quantity)
+				product_variants (*)
 				`,
 			{ count: 'exact' }
 		);
 
-		// Apply filters
+		// Apply status filter to exclude archived by default if status is not specified
+		query = query.neq('status', 'archived');
+
+		// Apply search filter
 		if (search) {
-			const searchPattern = `%${search}%`;
-			query = query.or(
-				`sku.ilike.${searchPattern},barcode.ilike.${searchPattern},name.ilike.${searchPattern}`
-			);
-		}
-
-		if (categoryId && categoryId !== 'all') {
-			query = query.eq('category_id', categoryId);
-		}
-
-		if (status && status !== 'all') {
-			query = query.eq('status', status);
+			query = query.ilike('name', `%${search}%`);
 		}
 
 		// Apply sorting
@@ -78,8 +64,7 @@ export class ProductRepository {
 			created_by: string | null;
 			created_at: string;
 			updated_at: string;
-			categories: { name: string } | null;
-			inventory: { quantity: number }[] | { quantity: number } | null;
+			product_variants: { id: string; product_id: string; quantity: number; price: number }[] | null;
 		};
 
 		const products: Product[] = ((data as unknown as SupabaseProductRow[]) || []).map((p) => ({
@@ -95,10 +80,16 @@ export class ProductRepository {
 			created_by: p.created_by,
 			created_at: p.created_at,
 			updated_at: p.updated_at,
-			category_name: p.categories?.name || null,
-			quantity: Array.isArray(p.inventory)
-				? (p.inventory[0]?.quantity ?? 0)
-				: (p.inventory ? (p.inventory as unknown as { quantity: number }).quantity : 0)
+			category_name: null,
+			quantity: 0,
+			variants: (p.product_variants || [])
+				.map((v) => ({
+					id: v.id,
+					product_id: v.product_id,
+					quantity: Number(v.quantity),
+					price: Number(v.price)
+				}))
+				.sort((a, b) => a.quantity - b.quantity)
 		}));
 
 		return {
@@ -113,8 +104,7 @@ export class ProductRepository {
 			.select(
 				`
 				*,
-				categories (name),
-				inventory (quantity)
+				product_variants (*)
 				`
 			)
 			.eq('id', id)
@@ -140,8 +130,7 @@ export class ProductRepository {
 			created_by: string | null;
 			created_at: string;
 			updated_at: string;
-			categories: { name: string } | null;
-			inventory: { quantity: number }[] | { quantity: number } | null;
+			product_variants: { id: string; product_id: string; quantity: number; price: number }[] | null;
 		};
 
 		const p = data as unknown as SupabaseProductSingleRow;
@@ -159,10 +148,16 @@ export class ProductRepository {
 			created_by: p.created_by,
 			created_at: p.created_at,
 			updated_at: p.updated_at,
-			category_name: p.categories?.name || null,
-			quantity: Array.isArray(p.inventory)
-				? (p.inventory[0]?.quantity ?? 0)
-				: (p.inventory ? (p.inventory as unknown as { quantity: number }).quantity : 0)
+			category_name: null,
+			quantity: 0,
+			variants: (p.product_variants || [])
+				.map((v) => ({
+					id: v.id,
+					product_id: v.product_id,
+					quantity: Number(v.quantity),
+					price: Number(v.price)
+				}))
+				.sort((a, b) => a.quantity - b.quantity)
 		};
 	}
 
@@ -198,20 +193,22 @@ export class ProductRepository {
 
 	async create(
 		productData: CreateProductInput & { id?: string },
-		createdBy: string | null,
-		initialQuantity: number = 0
+		createdBy: string | null
 	): Promise<Product> {
+		const generatedSku = productData.sku || `PROD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+		const basePrice = productData.variants[0]?.price ?? 0;
+
 		// Insert product
 		const { data: product, error: pError } = await supabase
 			.from('products')
 			.insert({
 				id: productData.id, // Support pre-generated ID
-				category_id: productData.category_id,
-				sku: productData.sku.trim(),
+				category_id: null,
+				sku: generatedSku,
 				barcode: productData.barcode?.trim() || null,
 				name: productData.name.trim(),
 				description: productData.description?.trim() || null,
-				price: productData.price,
+				price: basePrice,
 				image_url: productData.image_url || null,
 				status: productData.status,
 				created_by: createdBy
@@ -221,62 +218,55 @@ export class ProductRepository {
 
 		if (pError) {
 			console.error('Supabase error in ProductRepository.create (products):', pError);
-			if (pError.code === '23505') {
-				if (pError.message.includes('sku')) {
-					throw new Error('DUPLICATE_SKU');
-				}
-				if (pError.message.includes('barcode')) {
-					throw new Error('DUPLICATE_BARCODE');
-				}
-			}
 			throw new Error(`Database operation failed: ${pError.message}`);
 		}
 
-		// Insert initial inventory
-		const { error: invError } = await supabase.from('inventory').insert({
+		// Insert product variants
+		const variantsToInsert = productData.variants.map((v) => ({
 			product_id: product.id,
-			quantity: initialQuantity
-		});
+			quantity: v.quantity,
+			price: v.price
+		}));
 
-		if (invError) {
-			console.error('Supabase error in ProductRepository.create (inventory):', invError);
+		const { error: vError } = await supabase
+			.from('product_variants')
+			.insert(variantsToInsert);
+
+		if (vError) {
+			console.error('Supabase error in ProductRepository.create (product_variants):', vError);
 			// Roll back the product insertion to maintain integrity
 			await supabase.from('products').delete().eq('id', product.id);
-			throw new Error(`Failed to initialize inventory for product: ${invError.message}`);
+			throw new Error(`Failed to initialize variants for product: ${vError.message}`);
 		}
 
-		// If initialQuantity > 0, also insert an inventory transaction
-		if (initialQuantity > 0) {
-			const { error: txError } = await supabase.from('inventory_transactions').insert({
-				product_id: product.id,
-				transaction_type: 'STOCK_IN',
-				quantity: initialQuantity,
-				remarks: 'Initial inventory on product creation',
-				created_by: createdBy
-			});
-			if (txError) {
-				console.error('Supabase error inserting initial transaction:', txError);
-			}
-		}
+		// Insert dummy/initial inventory record so other database queries/views don't fail
+		await supabase.from('inventory').insert({
+			product_id: product.id,
+			quantity: 0
+		}).select();
 
 		return {
 			...product,
 			price: Number(product.price),
 			category_name: null,
-			quantity: initialQuantity
+			quantity: 0,
+			variants: productData.variants.map((v) => ({
+				product_id: product.id,
+				quantity: v.quantity,
+				price: v.price
+			})).sort((a, b) => a.quantity - b.quantity)
 		};
 	}
 
 	async update(id: string, productData: UpdateProductInput): Promise<Product> {
+		const basePrice = productData.variants[0]?.price ?? 0;
+
 		const { data, error } = await supabase
 			.from('products')
 			.update({
-				category_id: productData.category_id,
-				sku: productData.sku.trim(),
-				barcode: productData.barcode?.trim() || null,
 				name: productData.name.trim(),
 				description: productData.description?.trim() || null,
-				price: productData.price,
+				price: basePrice,
 				image_url: productData.image_url || null,
 				status: productData.status,
 				updated_at: new Date().toISOString()
@@ -287,20 +277,44 @@ export class ProductRepository {
 
 		if (error) {
 			console.error('Supabase error in ProductRepository.update:', error);
-			if (error.code === '23505') {
-				if (error.message.includes('sku')) {
-					throw new Error('DUPLICATE_SKU');
-				}
-				if (error.message.includes('barcode')) {
-					throw new Error('DUPLICATE_BARCODE');
-				}
-			}
 			throw new Error(`Database operation failed: ${error.message}`);
+		}
+
+		// Delete old variants
+		const { error: delError } = await supabase
+			.from('product_variants')
+			.delete()
+			.eq('product_id', id);
+
+		if (delError) {
+			console.error('Supabase error deleting product_variants:', delError);
+			throw new Error(`Failed to update variants: ${delError.message}`);
+		}
+
+		// Insert new variants
+		const variantsToInsert = productData.variants.map((v) => ({
+			product_id: id,
+			quantity: v.quantity,
+			price: v.price
+		}));
+
+		const { error: insError } = await supabase
+			.from('product_variants')
+			.insert(variantsToInsert);
+
+		if (insError) {
+			console.error('Supabase error inserting product_variants:', insError);
+			throw new Error(`Failed to insert variants: ${insError.message}`);
 		}
 
 		return {
 			...data,
-			price: Number(data.price)
+			price: Number(data.price),
+			variants: productData.variants.map((v) => ({
+				product_id: id,
+				quantity: v.quantity,
+				price: v.price
+			})).sort((a, b) => a.quantity - b.quantity)
 		} as Product;
 	}
 
@@ -320,25 +334,10 @@ export class ProductRepository {
 	}
 
 	async delete(id: string): Promise<void> {
-		const { error: txError } = await supabase
-			.from('inventory_transactions')
-			.delete()
-			.eq('product_id', id);
-
-		if (txError) {
-			console.error('Supabase error deleting inventory transactions:', txError);
-			throw new Error(`Failed to delete inventory transactions: ${txError.message}`);
-		}
-
-		const { error: invError } = await supabase
-			.from('inventory')
-			.delete()
-			.eq('product_id', id);
-
-		if (invError) {
-			console.error('Supabase error deleting inventory:', invError);
-			throw new Error(`Failed to delete inventory: ${invError.message}`);
-		}
+		// Clean up any historical inventory records
+		await supabase.from('inventory_transactions').delete().eq('product_id', id);
+		await supabase.from('inventory').delete().eq('product_id', id);
+		await supabase.from('product_variants').delete().eq('product_id', id);
 
 		const { error: pError } = await supabase
 			.from('products')
@@ -350,46 +349,7 @@ export class ProductRepository {
 			throw new Error(`Failed to delete product: ${pError.message}`);
 		}
 	}
-
-	async findTransactionsByProductId(productId: string): Promise<InventoryTransaction[]> {
-		const { data, error } = await supabase
-			.from('inventory_transactions')
-			.select(
-				`
-				*,
-				users (full_name)
-				`
-			)
-			.eq('product_id', productId)
-			.order('created_at', { ascending: false });
-
-		if (error) {
-			console.error('Supabase error in ProductRepository.findTransactionsByProductId:', error);
-			throw new Error(`Database query failed: ${error.message}`);
-		}
-
-		type SupabaseTransactionRow = {
-			id: string;
-			product_id: string;
-			transaction_type: InventoryTransactionType;
-			quantity: number;
-			remarks: string | null;
-			created_by: string | null;
-			created_at: string;
-			users: { full_name: string } | null;
-		};
-
-		return ((data as unknown as SupabaseTransactionRow[]) || []).map((t) => ({
-			id: t.id,
-			product_id: t.product_id,
-			transaction_type: t.transaction_type,
-			quantity: t.quantity,
-			remarks: t.remarks,
-			created_by: t.created_by,
-			created_at: t.created_at,
-			user_full_name: t.users?.full_name || null
-		}));
-	}
 }
 
 export const productRepository = new ProductRepository();
+

@@ -24,6 +24,16 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 	}
 
+	// 3. Redirect obsolete inventory-related routes to the dashboard
+	if (
+		pathname.startsWith('/inventory') ||
+		pathname.startsWith('/categories') ||
+		pathname.startsWith('/reports')
+	) {
+		throw redirect(303, '/dashboard');
+	}
+
 	const response = await resolve(event);
 	return response;
+
 };

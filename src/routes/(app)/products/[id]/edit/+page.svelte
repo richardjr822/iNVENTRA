@@ -1,12 +1,11 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import type { SubmitFunction } from './$types';
-	import { updateProductSchema } from '$lib/validations/product.schema';
 	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import { ArrowLeft, Loader2, Save, Upload } from '@lucide/svelte';
+	import { ArrowLeft, Loader2, Save, Upload, Plus, Trash2 } from '@lucide/svelte';
 	import { toastService } from '$lib/services/toast.svelte';
 
 	let { data, form } = $props();
@@ -15,50 +14,86 @@
 	let loading = $state(false);
 	let errors = $state<Record<string, string>>({});
 
-	// Form reactive inputs, prefilled with loaded product details
-	let sku = $state(product.sku || '');
-	let barcode = $state(product.barcode || '');
-	let name = $state(product.name || '');
-	let category_id = $state(product.category_id || '');
-	let description = $state(product.description || '');
-	let price = $state(String(product.price) || '');
-	let status = $state<'active' | 'inactive' | 'archived'>(product.status || 'active');
-	let imageUrl = $state<string | null>(product.image_url || null);
+	// References for focus
+	let nameInputRef = $state<HTMLInputElement | null>(null);
+	let fileInputRef = $state<HTMLInputElement | null>(null);
 
-	// Image upload progress variables
+	// Initialize inputs
+	let name = $state(product.name);
+	let description = $state(product.description || '');
+	let status = $state<'active' | 'inactive' | 'archived'>(product.status);
+	let imageUrl = $state<string | null>(product.image_url);
+
+	// Initialize price variants
+	let variants = $state<{ quantity: string; price: string }[]>(
+		product.variants && product.variants.length > 0
+			? product.variants.map((v) => ({
+					quantity: String(v.quantity),
+					price: String(v.price)
+				}))
+			: [{ quantity: '1', price: '' }]
+	);
+
+	// Image upload variables
 	let isUploading = $state(false);
 	let uploadProgress = $state(0);
 	let imageError = $state<string | null>(null);
-	let dragActive = $state(false);
-	let fileInputRef = $state<HTMLInputElement | null>(null);
+
+	// Variant operations
+	function addVariant() {
+		variants.push({ quantity: '', price: '' });
+	}
+
+	function removeVariant(index: number) {
+		if (variants.length > 1) {
+			variants.splice(index, 1);
+		}
+	}
 
 	// Client-side validations
 	function validate() {
-		const result = updateProductSchema.safeParse({
-			id: product.id,
-			sku,
-			barcode: barcode || null,
-			name,
-			category_id,
-			description: description || null,
-			price: price === '' ? undefined : Number(price),
-			status,
-			image_url: imageUrl || null
-		});
+		const localErrors: Record<string, string> = {};
 
-		if (!result.success) {
-			const localErrors: Record<string, string> = {};
-			for (const issue of result.error.issues) {
-				const path = issue.path[0]?.toString();
-				if (path && path !== 'id') {
-					localErrors[path] = issue.message;
-				}
-			}
+		if (!name.trim()) {
+			localErrors.name = 'Please enter a product name.';
+			errors = localErrors;
+			setTimeout(() => nameInputRef?.focus(), 50);
+			return false;
+		}
+
+		if (variants.length === 0) {
+			localErrors.variants = 'Please add at least one price option.';
 			errors = localErrors;
 			return false;
 		}
 
-		errors = {};
+		const quantitiesSeen = new Set<number>();
+		for (let i = 0; i < variants.length; i++) {
+			const v = variants[i];
+			const qNum = parseInt(v.quantity);
+			const pNum = parseFloat(v.price);
+
+			if (!v.quantity || isNaN(qNum) || qNum <= 0) {
+				localErrors.variants = `Please enter a valid quantity for price option #${i + 1}.`;
+				errors = localErrors;
+				return false;
+			}
+
+			if (quantitiesSeen.has(qNum)) {
+				localErrors.variants = `You have set the price for ${qNum} quantity more than once.`;
+				errors = localErrors;
+				return false;
+			}
+			quantitiesSeen.add(qNum);
+
+			if (!v.price || isNaN(pNum) || pNum < 0) {
+				localErrors.variants = 'Please enter a price.';
+				errors = localErrors;
+				return false;
+			}
+		}
+
+		errors = localErrors;
 		return true;
 	}
 
@@ -70,7 +105,7 @@
 		}
 
 		if (isUploading) {
-			toastService.trigger('Please wait for the image upload to complete.', 'info');
+			toastService.trigger('Please wait for photo upload to finish.', 'info');
 			cancel();
 			return;
 		}
@@ -82,32 +117,32 @@
 		};
 	};
 
-	// Reset validation error state once user types
+	// Reset error state on updates
 	$effect(() => {
-		if (sku && errors.sku) delete errors.sku;
 		if (name && errors.name) delete errors.name;
-		if (category_id && errors.category_id) delete errors.category_id;
-		if (price && errors.price) delete errors.price;
+		if (variants.length > 0 && errors.variants) delete errors.variants;
 	});
 
-	// Sync server validation failure responses
+	// Sync server responses
 	$effect(() => {
 		if (form?.errors) {
 			errors = { ...form.errors };
 		}
 		if (form?.values) {
-			sku = form.values.sku || '';
-			barcode = form.values.barcode || '';
 			name = form.values.name || '';
-			category_id = form.values.category_id || '';
 			description = form.values.description || '';
-			price = form.values.price !== undefined ? String(form.values.price) : '';
 			status = (form.values.status as 'active' | 'inactive' | 'archived') || 'active';
 			imageUrl = form.values.image_url || null;
+			if (form.values.variants) {
+				variants = form.values.variants.map((v: any) => ({
+					quantity: String(v.quantity),
+					price: String(v.price)
+				}));
+			}
 		}
 	});
 
-	// AJAX file uploading progress logic
+	// File upload logic
 	function handleFileUpload(file: File) {
 		const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 		const maxSize = 5 * 1024 * 1024; // 5 MB
@@ -115,12 +150,12 @@
 		imageError = null;
 
 		if (!allowedTypes.includes(file.type)) {
-			imageError = 'File format must be JPG, JPEG, PNG, or WEBP.';
+			imageError = 'Format must be JPG, JPEG, PNG, or WEBP.';
 			return;
 		}
 
 		if (file.size > maxSize) {
-			imageError = 'File size must be 5 MB or less.';
+			imageError = 'File size is too big. Use 5 MB or less.';
 			return;
 		}
 
@@ -143,25 +178,24 @@
 			if (xhr.status === 200) {
 				try {
 					const res = JSON.parse(xhr.responseText);
-					// Add cache buster query string to force re-render updated preview instantly
-					imageUrl = `${res.imageUrl}?t=${Date.now()}`;
+					imageUrl = res.imageUrl;
 					imageError = null;
 				} catch {
-					imageError = 'Failed to process file response.';
+					imageError = 'Failed to load photo preview.';
 				}
 			} else {
 				try {
 					const res = JSON.parse(xhr.responseText);
-					imageError = res.message || 'Failed to upload image.';
+					imageError = res.message || 'Failed to upload photo.';
 				} catch {
-					imageError = 'Server upload failed.';
+					imageError = 'Failed to upload photo.';
 				}
 			}
 		});
 
 		xhr.addEventListener('error', () => {
 			isUploading = false;
-			imageError = 'Network error occurred during image upload.';
+			imageError = 'Network error during upload.';
 		});
 
 		xhr.open('POST', '/api/products/upload');
@@ -172,26 +206,6 @@
 		const target = e.target as HTMLInputElement;
 		if (target.files && target.files[0]) {
 			handleFileUpload(target.files[0]);
-		}
-	}
-
-	function handleDrag(e: DragEvent) {
-		e.preventDefault();
-		e.stopPropagation();
-		if (e.type === 'dragenter' || e.type === 'dragover') {
-			dragActive = true;
-		} else if (e.type === 'dragleave') {
-			dragActive = false;
-		}
-	}
-
-	function handleDrop(e: DragEvent) {
-		e.preventDefault();
-		e.stopPropagation();
-		dragActive = false;
-
-		if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
-			handleFileUpload(e.dataTransfer.files[0]);
 		}
 	}
 
@@ -207,46 +221,35 @@
 </script>
 
 <svelte:head>
-	<title>Edit Product - {product.name} - Inventra</title>
-	<meta
-		name="description"
-		content="Modify details, pricing, categories, status, and replace product image catalog."
-	/>
+	<title>Edit Product - Price Monitoring System</title>
 </svelte:head>
 
-<div class="max-w-3xl mx-auto space-y-6">
-	<!-- Navigation back breadcrumb -->
+<div class="max-w-xl mx-auto space-y-6 pb-20">
+	<!-- Navigation back -->
 	<div>
 		<a
-			href="/products"
+			href="/products/{product.id}"
 			class="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer group"
 		>
 			<ArrowLeft class="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
-			Back to Products
+			Back to Details
 		</a>
 	</div>
 
-	<!-- Header titles -->
+	<!-- Title Header -->
 	<div>
 		<h2 class="text-2xl font-black tracking-tight">Edit Product</h2>
 		<p class="text-sm text-muted-foreground">
-			Modify specified product properties and save updates.
+			Modify pricing variants and update product photo information.
 		</p>
 	</div>
 
-	<Card.Root class="border-border/40 bg-card/65 backdrop-blur-md shadow-xl">
-		<Card.Header class="pb-4">
-			<Card.Title class="text-lg font-bold">Edit Product Parameters</Card.Title>
-			<Card.Description class="text-sm"
-				>Update fields, status tags, description notes, or replace catalog image files.</Card.Description
-			>
-		</Card.Header>
-
-		<Card.Content>
+	<Card.Root class="border-border/40 bg-card/65 backdrop-blur-md shadow-xl overflow-hidden">
+		<Card.Content class="p-6 relative">
 			<!-- Action failures message feedback -->
 			{#if form?.error}
 				<div
-					class="mb-5 rounded-lg bg-destructive/15 p-3.5 text-sm font-medium text-destructive border border-destructive/25 flex items-center gap-2.5 animate-in fade-in slide-in-from-top-1 duration-200"
+					class="mb-6 rounded-xl bg-destructive/15 p-4 text-sm font-medium text-destructive border border-destructive/25 flex items-center gap-2.5"
 					role="alert"
 				>
 					<span class="h-2 w-2 rounded-full bg-destructive animate-pulse"></span>
@@ -255,313 +258,193 @@
 			{/if}
 
 			<form method="POST" use:enhance={handleSubmit} class="space-y-6">
-				<!-- Hidden product ID and image references -->
+				<!-- Hidden inputs -->
 				<input type="hidden" name="image_url" value={imageUrl || ''} />
+				<input type="hidden" name="variantsJson" value={JSON.stringify(variants)} />
+				<input type="hidden" name="description" value={description} />
+				<input type="hidden" name="status" value={status} />
 
-				<!-- 1. Product Image Drag & Drop Dropzone Box -->
+				<!-- 1. Product Name -->
 				<div class="space-y-2">
-					<Label class="text-sm font-bold tracking-wide">Product Image</Label>
+					<Label for="name" class="text-base font-extrabold tracking-wide">Product Name</Label>
+					<Input
+						id="name"
+						name="name"
+						type="text"
+						placeholder="e.g. Coca Cola, Purefoods Corned Beef"
+						bind:value={name}
+						bind:ref={nameInputRef}
+						disabled={loading}
+						class="h-14 text-base focus-visible:ring-emerald-500/50 bg-background border-border/50 {errors.name ? 'border-destructive ring-1 ring-destructive' : ''}"
+						required
+					/>
+					{#if errors.name}
+						<p class="text-xs font-bold text-destructive">
+							{errors.name}
+						</p>
+					{/if}
+				</div>
 
-					<div
-						role="button"
-						tabindex="0"
-						class="relative flex flex-col items-center justify-center min-h-[160px] rounded-xl border border-dashed p-6 transition-colors duration-200 outline-none
-						{dragActive
-							? 'border-primary bg-primary/5'
-							: 'border-border/60 bg-background/30 hover:bg-background/50 hover:border-muted-foreground/40'}
-						{imageUrl ? 'border-solid border-border/40' : ''}"
-						ondragenter={handleDrag}
-						ondragover={handleDrag}
-						ondragleave={handleDrag}
-						ondrop={handleDrop}
-						onclick={handleBrowseClick}
-						onkeydown={(e) => e.key === 'Enter' && handleBrowseClick()}
-						aria-label="Upload product image"
-					>
+				<!-- 3. Product Photo Upload (Choose Photo Button) -->
+				<div class="space-y-2 pt-2">
+					<Label class="text-base font-extrabold tracking-wide">📷 Product Photo (Optional)</Label>
+
+					<div class="flex flex-col sm:flex-row sm:items-center gap-4">
 						<input
 							type="file"
 							bind:this={fileInputRef}
 							class="hidden"
 							accept="image/jpeg, image/jpg, image/png, image/webp"
 							onchange={handleFileSelect}
-							disabled={isUploading}
+							disabled={isUploading || loading}
 						/>
 
+						<Button
+							type="button"
+							variant="outline"
+							onclick={handleBrowseClick}
+							disabled={isUploading || loading}
+							class="h-14 px-6 font-bold border-border/60 text-sm hover:bg-muted active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 min-w-[150px]"
+						>
+							{#if isUploading}
+								<Loader2 class="h-4 w-4 animate-spin text-primary" />
+								<span>Uploading...</span>
+							{:else}
+								<span>Choose Photo</span>
+							{/if}
+						</Button>
+
 						{#if imageUrl}
-							<!-- Image preview box -->
-							<div class="flex flex-col sm:flex-row items-center gap-5 w-full">
-								<div
-									class="relative h-28 w-28 rounded-lg border border-border/40 overflow-hidden bg-muted shadow-sm shrink-0"
+							<!-- Simple image preview with deletion -->
+							<div class="flex items-center gap-3">
+								<div class="h-14 w-14 rounded-xl overflow-hidden border border-border/40 bg-muted shrink-0">
+									<img src={imageUrl} alt="Preview" class="h-full w-full object-cover" />
+								</div>
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									onclick={handleRemoveImage}
+									class="h-8 text-xs font-bold text-destructive hover:bg-destructive/10 cursor-pointer"
 								>
-									<img src={imageUrl} alt="Uploaded preview" class="h-full w-full object-cover" />
-								</div>
-								<div class="text-left space-y-1.5 flex-grow">
-									<p class="text-xs font-bold text-emerald-500 flex items-center gap-1.5">
-										<span class="h-2 w-2 rounded-full bg-emerald-500"></span>
-										Active Catalog Image
-									</p>
-									<p
-										class="text-[10px] text-muted-foreground font-mono truncate max-w-sm"
-										title={imageUrl}
-									>
-										{imageUrl}
-									</p>
-									<Button
-										type="button"
-										variant="outline"
-										size="sm"
-										onclick={(e) => {
-											e.stopPropagation();
-											handleRemoveImage();
-										}}
-										class="h-7 text-xs font-bold text-destructive hover:bg-destructive/10 hover:text-destructive border-border/60 cursor-pointer"
-									>
-										Delete Image
-									</Button>
-								</div>
-							</div>
-						{:else if isUploading}
-							<!-- Progress bar display -->
-							<div class="flex flex-col items-center justify-center space-y-3 w-full max-w-xs">
-								<Loader2 class="h-6 w-6 animate-spin text-primary" />
-								<div
-									class="w-full bg-muted rounded-full h-2 overflow-hidden border border-border/45"
-								>
-									<div
-										class="bg-primary h-full rounded-full transition-all duration-150"
-										style="width: {uploadProgress}%"
-									></div>
-								</div>
-								<p class="text-[10px] font-bold text-muted-foreground tracking-wide">
-									Uploading: {uploadProgress}% Completed
-								</p>
-							</div>
-						{:else}
-							<!-- Drag and Drop Placeholder -->
-							<div class="text-center space-y-2 cursor-pointer">
-								<div
-									class="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-muted/80 text-muted-foreground border border-border/50"
-								>
-									<Upload class="h-5 w-5 text-muted-foreground" />
-								</div>
-								<div class="space-y-1">
-									<p class="text-xs font-bold text-foreground">
-										Drag & drop a new product image to replace, or <span
-											class="text-primary hover:underline">browse</span
-										>
-									</p>
-									<p class="text-[10px] text-muted-foreground font-medium">
-										Supports JPG, JPEG, PNG, WEBP (Max size: 5 MB)
-									</p>
-								</div>
+									Remove
+								</Button>
 							</div>
 						{/if}
 					</div>
 
 					{#if imageError}
-						<p
-							class="text-xs font-semibold text-destructive animate-in fade-in slide-in-from-top-1 duration-150"
-						>
+						<p class="text-xs font-semibold text-destructive mt-1">
 							{imageError}
 						</p>
 					{/if}
 				</div>
 
-				<!-- Form Fields Rows -->
-				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-					<!-- Product SKU Field (Keep editable but highlight it is unique) -->
-					<div class="space-y-2">
-						<Label for="sku" class="text-sm font-bold tracking-wide flex items-center gap-1">
-							SKU <span class="text-destructive font-black">*</span>
-						</Label>
-						<Input
-							id="sku"
-							name="sku"
-							type="text"
-							placeholder="e.g., ELEC-MOU-001"
-							bind:value={sku}
-							disabled={loading}
-							aria-invalid={errors.sku ? 'true' : 'false'}
-							class="h-10 focus-visible:ring-emerald-500/50 focus-visible:border-emerald-500 bg-background/50 border-border/60"
-							required
-						/>
-						{#if errors.sku}
-							<p class="text-xs font-semibold text-destructive">
-								{errors.sku}
-							</p>
-						{/if}
+				<!-- 4. Prices (Stacked Variants Card UI) -->
+				<div class="space-y-4 pt-4 border-t border-border/30">
+					<div>
+						<h3 class="text-base font-extrabold tracking-wide">Prices</h3>
+						<p class="text-xs text-muted-foreground mt-0.5">Add the quantity and price of your product.</p>
+						<p class="text-[10px] text-muted-foreground italic mt-0.5">Examples: 1 piece = ₱5, 3 pieces = ₱10</p>
 					</div>
 
-					<!-- Barcode Field -->
-					<div class="space-y-2">
-						<Label for="barcode" class="text-sm font-bold tracking-wide">Barcode</Label>
-						<Input
-							id="barcode"
-							name="barcode"
-							type="text"
-							placeholder="e.g., 690123456789"
-							bind:value={barcode}
-							disabled={loading}
-							aria-invalid={errors.barcode ? 'true' : 'false'}
-							class="h-10 focus-visible:ring-emerald-500/50 focus-visible:border-emerald-500 bg-background/50 border-border/60"
-						/>
-						{#if errors.barcode}
-							<p class="text-xs font-semibold text-destructive">
-								{errors.barcode}
-							</p>
-						{/if}
-					</div>
-				</div>
-
-				<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-					<!-- Product Name Field -->
-					<div class="space-y-2 md:col-span-2">
-						<Label for="name" class="text-sm font-bold tracking-wide flex items-center gap-1">
-							Product Name <span class="text-destructive font-black">*</span>
-						</Label>
-						<Input
-							id="name"
-							name="name"
-							type="text"
-							placeholder="e.g., Logitech Wireless MX Master 3S"
-							bind:value={name}
-							disabled={loading}
-							aria-invalid={errors.name ? 'true' : 'false'}
-							class="h-10 focus-visible:ring-emerald-500/50 focus-visible:border-emerald-500 bg-background/50 border-border/60"
-							required
-						/>
-						{#if errors.name}
-							<p class="text-xs font-semibold text-destructive">
-								{errors.name}
-							</p>
-						{/if}
-					</div>
-
-					<!-- Category Selector Field -->
-					<div class="space-y-2">
-						<Label
-							for="category_id"
-							class="text-sm font-bold tracking-wide flex items-center gap-1"
-						>
-							Category <span class="text-destructive font-black">*</span>
-						</Label>
-						<select
-							id="category_id"
-							name="category_id"
-							bind:value={category_id}
-							disabled={loading}
-							aria-invalid={errors.category_id ? 'true' : 'false'}
-							class="flex h-10 w-full rounded-xl border border-border/60 bg-background/50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200"
-							required
-						>
-							<option value="" disabled>Select category...</option>
-							{#each data.categories as cat (cat.id)}
-								<option value={cat.id}>{cat.name}</option>
-							{/each}
-						</select>
-						{#if errors.category_id}
-							<p class="text-xs font-semibold text-destructive">
-								{errors.category_id}
-							</p>
-						{/if}
-					</div>
-				</div>
-
-				<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-					<!-- Product Price Field -->
-					<div class="space-y-2 md:col-span-2">
-						<Label for="price" class="text-sm font-bold tracking-wide flex items-center gap-1">
-							Selling Price ($) <span class="text-destructive font-black">*</span>
-						</Label>
-						<Input
-							id="price"
-							name="price"
-							type="number"
-							step="any"
-							min="0"
-							placeholder="e.g., 99.99"
-							bind:value={price}
-							disabled={loading}
-							aria-invalid={errors.price ? 'true' : 'false'}
-							class="h-10 focus-visible:ring-emerald-500/50 focus-visible:border-emerald-500 bg-background/50 border-border/60"
-							required
-						/>
-						{#if errors.price}
-							<p class="text-xs font-semibold text-destructive">
-								{errors.price}
-							</p>
-						{/if}
-					</div>
-
-					<!-- Status Field -->
-					<div class="space-y-2">
-						<Label for="status" class="text-sm font-bold tracking-wide flex items-center gap-1">
-							Status <span class="text-destructive font-black">*</span>
-						</Label>
-						<select
-							id="status"
-							name="status"
-							bind:value={status}
-							disabled={loading}
-							class="flex h-10 w-full rounded-xl border border-border/60 bg-background/50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200"
-							required
-						>
-							<option value="active">Active</option>
-							<option value="inactive">Inactive</option>
-							<option value="archived">Archived</option>
-						</select>
-					</div>
-				</div>
-
-				<!-- Description Field -->
-				<div class="space-y-2">
-					<Label for="description" class="text-sm font-bold tracking-wide">Description</Label>
-					<textarea
-						id="description"
-						name="description"
-						rows="4"
-						placeholder="Add description details summarizing specifications, warranties, or inventory remarks..."
-						bind:value={description}
-						disabled={loading}
-						aria-invalid={errors.description ? 'true' : 'false'}
-						class="flex min-h-[100px] w-full rounded-xl border border-border/60 bg-background/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:border-emerald-500 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200"
-					></textarea>
-					<div
-						class="flex justify-between items-center text-[10px] font-bold text-muted-foreground/85 px-0.5"
-					>
-						<span>Maximum 1000 characters</span>
-						<span class={description.length > 1000 ? 'text-destructive' : ''}>
-							{description.length}/1000
-						</span>
-					</div>
-					{#if errors.description}
-						<p class="text-xs font-semibold text-destructive">
-							{errors.description}
-						</p>
+					{#if errors.variants}
+						<div class="p-3 text-xs font-bold text-destructive bg-destructive/10 border border-destructive/20 rounded-xl">
+							{errors.variants}
+						</div>
 					{/if}
-				</div>
 
-				<!-- Action Controls -->
-				<div class="flex items-center justify-end gap-3 border-t border-border/40 pt-5">
+					<div class="space-y-3">
+						{#each variants as variant, i (i)}
+							<div class="flex items-center gap-3 p-4 rounded-xl border border-border/40 bg-background/25">
+								<div class="flex-grow grid grid-cols-2 gap-4">
+									<!-- Quantity -->
+									<div class="space-y-1.5">
+										<Label class="text-xs font-bold text-muted-foreground tracking-wide">Quantity</Label>
+										<Input
+											type="number"
+											bind:value={variant.quantity}
+											min="1"
+											step="1"
+											placeholder="e.g. 1"
+											disabled={loading}
+											required
+											class="h-12 text-base focus-visible:ring-emerald-500/50 bg-background border-border/50"
+											aria-label="Quantity"
+										/>
+									</div>
+
+									<!-- Price -->
+									<div class="space-y-1.5">
+										<Label class="text-xs font-bold text-muted-foreground tracking-wide">Price (₱)</Label>
+										<div class="relative">
+											<span class="absolute left-3 top-1/2 -translate-y-1/2 text-base font-black text-muted-foreground/60 select-none">₱</span>
+											<Input
+												type="number"
+												bind:value={variant.price}
+												min="0"
+												step="any"
+												placeholder="0.00"
+												disabled={loading}
+												required
+												class="h-12 pl-7 text-base focus-visible:ring-emerald-500/50 bg-background border-border/50"
+												aria-label="Price"
+											/>
+										</div>
+									</div>
+								</div>
+
+								<!-- Delete Row Action -->
+								{#if variants.length > 1}
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon"
+										onclick={() => removeVariant(i)}
+										disabled={loading}
+										class="h-11 w-11 text-destructive hover:bg-destructive/10 hover:text-destructive rounded-xl shrink-0 mt-6 cursor-pointer flex items-center justify-center"
+										aria-label="Remove variant"
+									>
+										<Trash2 class="h-5 w-5" />
+									</Button>
+								{/if}
+							</div>
+						{/each}
+					</div>
+
 					<Button
 						type="button"
 						variant="outline"
-						href="/products"
+						onclick={addVariant}
 						disabled={loading}
-						class="font-bold border-border/60 hover:bg-muted cursor-pointer"
+						class="w-full h-14 border-dashed border-2 border-border/60 hover:bg-muted font-bold text-sm cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 transition-all mt-2"
+					>
+						<Plus class="h-4.5 w-4.5" />
+						<span>+ Add Price Option</span>
+					</Button>
+				</div>
+
+				<!-- 5. Save Button (Sticky Footer) -->
+				<div class="sticky bottom-0 left-0 right-0 bg-background/90 backdrop-blur-md border-t border-border/40 p-4 -mx-6 -mb-6 mt-8 flex justify-end gap-3 z-10">
+					<Button
+						type="button"
+						variant="outline"
+						href="/products/{product.id}"
+						disabled={loading}
+						class="h-14 px-6 font-bold border-border/60 hover:bg-muted cursor-pointer text-base rounded-xl active:scale-95"
 					>
 						Cancel
 					</Button>
 					<Button
 						type="submit"
 						disabled={loading || isUploading}
-						class="font-bold bg-primary hover:bg-primary/95 text-primary-foreground tracking-wide transition-all shadow-md shadow-primary/10 flex items-center justify-center gap-2 cursor-pointer active:scale-95 disabled:scale-100 disabled:opacity-50"
+						class="h-14 px-8 font-bold bg-green-600 hover:bg-green-700 text-white tracking-wide transition-all shadow-lg active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 rounded-xl flex-grow sm:flex-grow-0"
 					>
 						{#if loading}
-							<Loader2 class="h-4 w-4 animate-spin" />
-							<span>Saving Changes...</span>
+							<Loader2 class="h-5 w-5 animate-spin" />
+							<span>Saving...</span>
 						{:else}
-							<Save class="h-4 w-4" />
+							<Save class="h-5 w-5" />
 							<span>Save Changes</span>
 						{/if}
 					</Button>

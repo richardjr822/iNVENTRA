@@ -31,24 +31,6 @@
 			roles: ['admin', 'inventory_manager', 'viewer']
 		},
 		{
-			label: 'Categories',
-			href: '/categories',
-			icon: Tags,
-			roles: ['admin', 'inventory_manager']
-		},
-		{
-			label: 'Inventory',
-			href: '/inventory',
-			icon: Boxes,
-			roles: ['admin', 'inventory_manager']
-		},
-		{
-			label: 'Reports',
-			href: '/reports',
-			icon: FileText,
-			roles: ['admin', 'inventory_manager']
-		},
-		{
 			label: 'Audit Logs',
 			href: '/audit-logs',
 			icon: History,

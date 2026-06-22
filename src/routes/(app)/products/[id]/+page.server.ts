@@ -12,16 +12,11 @@ export const load: PageServerLoad = async ({ parent, params }) => {
 	}
 
 	try {
-		// Fetch product details and transactions concurrently
-		const [product, transactions] = await Promise.all([
-			productService.getProductById(id),
-			productService.getProductTransactions(id)
-		]);
+		const product = await productService.getProductById(id);
 
 		return {
 			user,
-			product,
-			transactions
+			product
 		};
 	} catch (err: unknown) {
 		console.error('Error loading product details page:', err);

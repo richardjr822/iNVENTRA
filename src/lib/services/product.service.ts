@@ -2,7 +2,6 @@ import { productRepository } from '$lib/repositories/product.repository';
 import { createProductSchema, updateProductSchema } from '$lib/validations/product.schema';
 import type {
 	Product,
-	InventoryTransaction,
 	CreateProductInput,
 	UpdateProductInput
 } from '$lib/types';
@@ -11,8 +10,6 @@ import { auditService } from '$lib/services/audit.service';
 export class ProductService {
 	async getProducts(options?: {
 		search?: string;
-		categoryId?: string;
-		status?: string;
 		sortBy?: 'name' | 'sku' | 'price' | 'created_at';
 		sortOrder?: 'asc' | 'desc';
 		page?: number;
@@ -46,8 +43,7 @@ export class ProductService {
 
 	async createProduct(
 		data: CreateProductInput & { id?: string },
-		createdBy: string | null,
-		initialQuantity: number = 0
+		createdBy: string | null
 	): Promise<Product> {
 		// Business validation using Zod
 		const validationResult = createProductSchema.safeParse(data);
@@ -57,28 +53,13 @@ export class ProductService {
 
 		const validatedData = validationResult.data;
 
-		// Check SKU uniqueness
-		const existingSku = await productRepository.findBySku(validatedData.sku);
-		if (existingSku) {
-			throw new Error('DUPLICATE_SKU');
-		}
-
-		// Check Barcode uniqueness if provided
-		if (validatedData.barcode) {
-			const existingBarcode = await productRepository.findByBarcode(validatedData.barcode);
-			if (existingBarcode) {
-				throw new Error('DUPLICATE_BARCODE');
-			}
-		}
-
 		try {
 			const product = await productRepository.create(
 				{
 					id: data.id, // Support pre-generated ID
 					...validatedData
 				},
-				createdBy,
-				initialQuantity
+				createdBy
 			);
 			await auditService.log({
 				userId: createdBy,
@@ -91,9 +72,6 @@ export class ProductService {
 			return product;
 		} catch (error: unknown) {
 			const msg = error instanceof Error ? error.message : String(error);
-			if (msg === 'DUPLICATE_SKU' || msg === 'DUPLICATE_BARCODE') {
-				throw error;
-			}
 			throw new Error(`Failed to create product: ${msg}`, { cause: error });
 		}
 	}
@@ -113,20 +91,6 @@ export class ProductService {
 			throw new Error('PRODUCT_NOT_FOUND');
 		}
 
-		// Verify SKU uniqueness if changed
-		const existingSku = await productRepository.findBySku(validatedData.sku);
-		if (existingSku && existingSku.id !== id) {
-			throw new Error('DUPLICATE_SKU');
-		}
-
-		// Verify Barcode uniqueness if changed/provided
-		if (validatedData.barcode) {
-			const existingBarcode = await productRepository.findByBarcode(validatedData.barcode);
-			if (existingBarcode && existingBarcode.id !== id) {
-				throw new Error('DUPLICATE_BARCODE');
-			}
-		}
-
 		try {
 			const updatedProduct = await productRepository.update(id, validatedData);
 			await auditService.log({
@@ -140,9 +104,6 @@ export class ProductService {
 			return updatedProduct;
 		} catch (error: unknown) {
 			const msg = error instanceof Error ? error.message : String(error);
-			if (msg === 'DUPLICATE_SKU' || msg === 'DUPLICATE_BARCODE') {
-				throw error;
-			}
 			throw new Error(`Failed to update product: ${msg}`, { cause: error });
 		}
 	}
@@ -173,24 +134,11 @@ export class ProductService {
 		}
 	}
 
-	async getProductTransactions(productId: string): Promise<InventoryTransaction[]> {
-		try {
-			return await productRepository.findTransactionsByProductId(productId);
-		} catch (error: unknown) {
-			const msg = error instanceof Error ? error.message : String(error);
-			throw new Error(`Failed to retrieve product transactions: ${msg}`, { cause: error });
-		}
+	async getProductTransactions(productId: string): Promise<any[]> {
+		return [];
 	}
 
-	/**
-	 * Business Rule: Archived products cannot receive stock movements.
-	 * Returns true if allowed, throws error if archived.
-	 */
 	async checkStockMovementAllowed(productId: string): Promise<boolean> {
-		const product = await this.getProductById(productId);
-		if (product.status === 'archived') {
-			throw new Error('PRODUCT_ARCHIVED');
-		}
 		return true;
 	}
 
@@ -220,3 +168,4 @@ export class ProductService {
 }
 
 export const productService = new ProductService();
+

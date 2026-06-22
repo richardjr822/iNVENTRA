@@ -1,3 +1,10 @@
+export interface ProductVariant {
+	id?: string;
+	product_id?: string;
+	quantity: number;
+	price: number;
+}
+
 export interface Product {
 	id: string;
 	category_id: string | null;
@@ -15,27 +22,27 @@ export interface Product {
 	// Joined fields for tables/views
 	category_name?: string | null;
 	quantity?: number; // current stock quantity
+	variants?: ProductVariant[];
 }
 
 export interface CreateProductInput {
 	id?: string;
-	category_id: string;
-	sku: string;
+	category_id?: string | null;
+	sku?: string;
 	barcode?: string | null;
 	name: string;
 	description?: string | null;
-	price: number;
+	price?: number;
 	image_url?: string | null;
 	status: 'active' | 'inactive';
+	variants: { quantity: number; price: number }[];
 }
 
 export interface UpdateProductInput {
-	category_id: string;
-	sku: string;
-	barcode?: string | null;
 	name: string;
 	description?: string | null;
-	price: number;
 	image_url?: string | null;
 	status: 'active' | 'inactive' | 'archived';
+	variants: { quantity: number; price: number }[];
 }
+
