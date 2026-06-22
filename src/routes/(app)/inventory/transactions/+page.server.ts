@@ -28,25 +28,27 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 	const limit = 10;
 
 	try {
-		// Load transactions list
-		const { transactions, totalCount } = await inventoryService.getTransactions({
-			search,
-			transactionType,
-			productId,
-			userId,
-			startDate,
-			endDate,
-			page,
-			limit,
-			sortBy,
-			sortOrder
-		});
-
-		// Load selectable active products for filter dropdown
-		const products = await inventoryService.getSelectableProducts();
-
-		// Load selectable users for filter dropdown
-		const users = await inventoryService.getAllUsers();
+		// Load transactions, products, and users in parallel
+		const [
+			{ transactions, totalCount },
+			products,
+			users
+		] = await Promise.all([
+			inventoryService.getTransactions({
+				search,
+				transactionType,
+				productId,
+				userId,
+				startDate,
+				endDate,
+				page,
+				limit,
+				sortBy,
+				sortOrder
+			}),
+			inventoryService.getSelectableProducts(),
+			inventoryService.getAllUsers()
+		]);
 
 		return {
 			user,

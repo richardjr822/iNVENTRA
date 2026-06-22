@@ -19,15 +19,15 @@ export const load: PageServerLoad = async ({ parent, params }) => {
 	}
 
 	try {
-		// Load product details
-		const product = await productService.getProductById(id);
-
-		// Load category list for dropdown selection
-		const { categories } = await categoryService.getCategories({
-			limit: 100,
-			sortBy: 'name',
-			sortOrder: 'asc'
-		});
+		// Load product details and category list in parallel
+		const [product, { categories }] = await Promise.all([
+			productService.getProductById(id),
+			categoryService.getCategories({
+				limit: 100,
+				sortBy: 'name',
+				sortOrder: 'asc'
+			})
+		]);
 
 		return {
 			user,

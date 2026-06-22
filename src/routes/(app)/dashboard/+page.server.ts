@@ -12,52 +12,53 @@ export const load: PageServerLoad = async ({ parent }) => {
 		// 1. Get safety threshold setting
 		const lowStockThreshold = await inventoryRepository.getLowStockThreshold();
 
-		// 2. Query dashboard counts/aggregates
-		const [totalProductsRow] = await sql`
-			SELECT COUNT(*)::int as count 
-			FROM products 
-			WHERE status != 'archived';
-		`;
-		const [categoriesCountRow] = await sql`
-			SELECT COUNT(DISTINCT category_id)::int as count 
-			FROM products 
-			WHERE status != 'archived' AND category_id IS NOT NULL;
-		`;
-		const [inventoryValueRow] = await sql`
-			SELECT COALESCE(SUM(p.price * COALESCE(i.quantity, 0)), 0)::float as value 
-			FROM products p 
-			LEFT JOIN inventory i ON p.id = i.product_id 
-			WHERE p.status != 'archived';
-		`;
-		const [lowStockRow] = await sql`
-			SELECT COUNT(*)::int as count 
-			FROM products p 
-			LEFT JOIN inventory i ON p.id = i.product_id 
-			WHERE p.status != 'archived' AND COALESCE(i.quantity, 0) < ${lowStockThreshold};
-		`;
-		const [outOfStockRow] = await sql`
-			SELECT COUNT(*)::int as count 
-			FROM products p 
-			LEFT JOIN inventory i ON p.id = i.product_id 
-			WHERE p.status != 'archived' AND COALESCE(i.quantity, 0) = 0;
-		`;
+		// 2. Query dashboard counts/aggregates, active products list, and transaction trend in parallel
+		const [aggregatesResult, productsRows, chartRows] = await Promise.all([
+			sql`
+				SELECT 
+					COUNT(*)::int as total_products,
+					COUNT(DISTINCT category_id)::int as categories_count,
+					COALESCE(SUM(p.price * COALESCE(i.quantity, 0)), 0)::float as inventory_value,
+					COUNT(CASE WHEN COALESCE(i.quantity, 0) < ${lowStockThreshold} THEN 1 END)::int as low_stock_alerts,
+					COUNT(CASE WHEN COALESCE(i.quantity, 0) = 0 THEN 1 END)::int as out_of_stock_count
+				FROM products p
+				LEFT JOIN inventory i ON p.id = i.product_id
+				WHERE p.status != 'archived';
+			`,
+			sql`
+				SELECT 
+					p.id, 
+					p.name, 
+					p.sku, 
+					c.name as category, 
+					COALESCE(i.quantity, 0)::int as stock, 
+					p.price::float as price
+				FROM products p
+				LEFT JOIN inventory i ON p.id = i.product_id
+				LEFT JOIN categories c ON p.category_id = c.id
+				WHERE p.status != 'archived'
+				ORDER BY COALESCE(i.quantity, 0) ASC, p.name ASC
+				LIMIT 50;
+			`,
+			sql`
+				SELECT 
+					TO_CHAR(DATE(created_at), 'Mon DD') as date, 
+					SUM(quantity)::int as quantity,
+					DATE(created_at) as raw_date
+				FROM inventory_transactions 
+				WHERE created_at >= NOW() - INTERVAL '30 days'
+				GROUP BY DATE(created_at), TO_CHAR(DATE(created_at), 'Mon DD')
+				ORDER BY raw_date ASC;
+			`
+		]);
 
-		// 3. Query active products list (up to 50 items) for progress bars and quick actions
-		const productsRows = await sql`
-			SELECT 
-				p.id, 
-				p.name, 
-				p.sku, 
-				c.name as category, 
-				COALESCE(i.quantity, 0)::int as stock, 
-				p.price::float as price
-			FROM products p
-			LEFT JOIN inventory i ON p.id = i.product_id
-			LEFT JOIN categories c ON p.category_id = c.id
-			WHERE p.status != 'archived'
-			ORDER BY COALESCE(i.quantity, 0) ASC, p.name ASC
-			LIMIT 50;
-		`;
+		const aggregates = aggregatesResult[0] || {
+			total_products: 0,
+			categories_count: 0,
+			inventory_value: 0,
+			low_stock_alerts: 0,
+			out_of_stock_count: 0
+		};
 
 		const products = productsRows.map((row) => ({
 			id: row.id,
@@ -68,19 +69,6 @@ export const load: PageServerLoad = async ({ parent }) => {
 			minStock: lowStockThreshold,
 			price: Number(row.price)
 		}));
-
-		// 4. Query live stock transactions aggregates in the last 30 days for trend chart
-		// Using transaction sum per day
-		const chartRows = await sql`
-			SELECT 
-				TO_CHAR(DATE(created_at), 'Mon DD') as date, 
-				SUM(quantity)::int as quantity,
-				DATE(created_at) as raw_date
-			FROM inventory_transactions 
-			WHERE created_at >= NOW() - INTERVAL '30 days'
-			GROUP BY DATE(created_at), TO_CHAR(DATE(created_at), 'Mon DD')
-			ORDER BY raw_date ASC;
-		`;
 
 		let chartData = chartRows.map((row) => ({
 			date: row.date,
@@ -99,11 +87,11 @@ export const load: PageServerLoad = async ({ parent }) => {
 
 		return {
 			user,
-			totalProducts: totalProductsRow?.count || 0,
-			categoriesCount: categoriesCountRow?.count || 0,
-			currentInventoryValue: inventoryValueRow?.value || 0,
-			lowStockAlerts: lowStockRow?.count || 0,
-			outOfStockCount: outOfStockRow?.count || 0,
+			totalProducts: aggregates.total_products || 0,
+			categoriesCount: aggregates.categories_count || 0,
+			currentInventoryValue: aggregates.inventory_value || 0,
+			lowStockAlerts: aggregates.low_stock_alerts || 0,
+			outOfStockCount: aggregates.out_of_stock_count || 0,
 			products,
 			chartData
 		};

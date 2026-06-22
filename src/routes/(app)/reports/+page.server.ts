@@ -12,23 +12,33 @@ export const load: PageServerLoad = async ({ parent }) => {
 	}
 
 	try {
-		// 1. Fetch current active products and their stock quantities
-		const products = await sql`
-			SELECT p.id, p.price::float as price, COALESCE(i.quantity, 0)::int as current_qty
-			FROM products p
-			LEFT JOIN inventory i ON p.id = i.product_id
-			WHERE p.status != 'archived';
-		`;
+		// Fetch reports statistics queries in parallel
+		const [products, transactions, cogsResult, txCountResult] = await Promise.all([
+			sql`
+				SELECT p.id, p.price::float as price, COALESCE(i.quantity, 0)::int as current_qty
+				FROM products p
+				LEFT JOIN inventory i ON p.id = i.product_id
+				WHERE p.status != 'archived';
+			`,
+			sql`
+				SELECT product_id, SUM(quantity)::int as net_qty
+				FROM inventory_transactions
+				WHERE created_at >= NOW() - INTERVAL '30 days'
+				GROUP BY product_id;
+			`,
+			sql`
+				SELECT COALESCE(SUM(p.price * ABS(t.quantity)), 0)::float as cogs
+				FROM inventory_transactions t
+				JOIN products p ON t.product_id = p.id
+				WHERE t.transaction_type = 'STOCK_OUT' AND t.created_at >= NOW() - INTERVAL '30 days';
+			`,
+			sql`
+				SELECT COUNT(*)::int as count 
+				FROM inventory_transactions;
+			`
+		]);
 
 		const totalProducts = products.length;
-
-		// 2. Fetch sum of transaction quantities in the last 30 days grouped by product
-		const transactions = await sql`
-			SELECT product_id, SUM(quantity)::int as net_qty
-			FROM inventory_transactions
-			WHERE created_at >= NOW() - INTERVAL '30 days'
-			GROUP BY product_id;
-		`;
 
 		// Map net quantities to product_id
 		const transactionMap = new Map<string, number>();
@@ -36,7 +46,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 			transactionMap.set(row.product_id, row.net_qty || 0);
 		}
 
-		// 3. Compute current total valuation and valuation 30 days ago
+		// Compute current total valuation and valuation 30 days ago
 		let currentValuation = 0;
 		let valuation30DaysAgo = 0;
 
@@ -60,14 +70,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 			valuationTrendPercent = 100.0; // Started from 0 value
 		}
 
-		// 4. Compute Cost of Goods Sold (COGS) in last 30 days (total value of STOCK_OUT dispatches)
-		const [cogsRow] = await sql`
-			SELECT COALESCE(SUM(p.price * ABS(t.quantity)), 0)::float as cogs
-			FROM inventory_transactions t
-			JOIN products p ON t.product_id = p.id
-			WHERE t.transaction_type = 'STOCK_OUT' AND t.created_at >= NOW() - INTERVAL '30 days';
-		`;
-		const cogs = cogsRow?.cogs || 0;
+		const cogs = cogsResult[0]?.cogs || 0;
 
 		// Compute Stock Turnover (COGS / Average Inventory)
 		const avgInventory = (currentValuation + valuation30DaysAgo) / 2;
@@ -77,12 +80,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 			stockTurnover = (cogs / avgInventory) * (365 / 30);
 		}
 
-		// Check if there are active transactions at all in the database
-		const [txCountRow] = await sql`
-			SELECT COUNT(*)::int as count 
-			FROM inventory_transactions;
-		`;
-		const totalTransactions = txCountRow?.count || 0;
+		const totalTransactions = txCountResult[0]?.count || 0;
 
 		return {
 			user,

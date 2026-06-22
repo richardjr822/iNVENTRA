@@ -12,11 +12,11 @@ export const load: PageServerLoad = async ({ parent, params }) => {
 	}
 
 	try {
-		// Fetch product details (includes joined category_name and current stock quantity)
-		const product = await productService.getProductById(id);
-
-		// Fetch recent inventory transactions (includes user full name)
-		const transactions = await productService.getProductTransactions(id);
+		// Fetch product details and transactions concurrently
+		const [product, transactions] = await Promise.all([
+			productService.getProductById(id),
+			productService.getProductTransactions(id)
+		]);
 
 		return {
 			user,

@@ -58,11 +58,10 @@ export class InventoryRepository {
 		if (sortBy === 'quantity') orderByColumn = 'COALESCE(i.quantity, 0)';
 		if (sortBy === 'updated_at') orderByColumn = 'COALESCE(i.updated_at, p.created_at)';
 
-		// Query count
+		// Query count (optimized by removing redundant LEFT JOIN)
 		const countQueryStr = `
 			SELECT COUNT(*) as count
 			FROM products p
-			LEFT JOIN inventory i ON p.id = i.product_id
 			${whereClause}
 		`;
 
@@ -252,12 +251,42 @@ export class InventoryRepository {
 		recentTransactions: InventoryTransaction[];
 		chartData: { date: string; quantity: number }[];
 	}> {
-		// 1. Get product from standard REST (ensuring consistency with repositories)
-		const { data: pData, error: pError } = await supabase
-			.from('products')
-			.select('*, categories (name)')
-			.eq('id', productId)
-			.maybeSingle();
+		// Fetch product details, inventory, recent 20 transactions, and historical transactions concurrently
+		const [productResult, inventoryResult, transactionsResult, allTransactionsResult] = await Promise.all([
+			supabase
+				.from('products')
+				.select('*, categories (name)')
+				.eq('id', productId)
+				.maybeSingle(),
+			sql`
+				SELECT * FROM inventory WHERE product_id = ${productId};
+			`,
+			sql`
+				SELECT 
+					t.id,
+					t.product_id,
+					t.transaction_type,
+					t.quantity,
+					t.remarks,
+					t.created_by,
+					t.created_at,
+					u.full_name as user_full_name
+				FROM inventory_transactions t
+				LEFT JOIN users u ON t.created_by = u.id
+				WHERE t.product_id = ${productId}
+				ORDER BY t.created_at DESC
+				LIMIT 20;
+			`,
+			sql`
+				SELECT quantity, created_at
+				FROM inventory_transactions
+				WHERE product_id = ${productId}
+				ORDER BY created_at ASC;
+			`
+		]);
+
+		const pData = productResult.data;
+		const pError = productResult.error;
 
 		if (pError || !pData) {
 			throw new Error('PRODUCT_NOT_FOUND');
@@ -279,10 +308,7 @@ export class InventoryRepository {
 			category_name: pData.categories?.name || null
 		};
 
-		// 2. Get inventory
-		const [invRow] = await sql`
-			SELECT * FROM inventory WHERE product_id = ${productId};
-		`;
+		const invRow = inventoryResult[0];
 		if (!invRow) {
 			throw new Error('INVENTORY_RECORD_NOT_FOUND');
 		}
@@ -294,25 +320,7 @@ export class InventoryRepository {
 			updated_at: new Date(invRow.updated_at).toISOString()
 		};
 
-		// 3. Get recent 20 transactions
-		const transactionsData = await sql`
-			SELECT 
-				t.id,
-				t.product_id,
-				t.transaction_type,
-				t.quantity,
-				t.remarks,
-				t.created_by,
-				t.created_at,
-				u.full_name as user_full_name
-			FROM inventory_transactions t
-			LEFT JOIN users u ON t.created_by = u.id
-			WHERE t.product_id = ${productId}
-			ORDER BY t.created_at DESC
-			LIMIT 20;
-		`;
-
-		const recentTransactions: InventoryTransaction[] = transactionsData.map((row) => ({
+		const recentTransactions: InventoryTransaction[] = transactionsResult.map((row) => ({
 			id: row.id,
 			product_id: row.product_id,
 			transaction_type: row.transaction_type as InventoryTransactionType,
@@ -323,14 +331,7 @@ export class InventoryRepository {
 			user_full_name: row.user_full_name
 		}));
 
-		// 4. Calculate stock movement chart data
-		// Query all historical transactions to build sequential stock values over time
-		const allTransactions = await sql`
-			SELECT quantity, created_at
-			FROM inventory_transactions
-			WHERE product_id = ${productId}
-			ORDER BY created_at ASC;
-		`;
+		const allTransactions = allTransactionsResult;
 
 		let runningQty = 0;
 		const chartData = allTransactions.map((tx) => {

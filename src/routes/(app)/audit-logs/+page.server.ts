@@ -23,18 +23,19 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 	const limit = 15; // Display 15 audit logs per page
 
 	try {
-		const { logs, totalCount } = await auditService.getLogs({
-			search,
-			userId,
-			action,
-			startDate,
-			endDate,
-			page,
-			limit
-		});
-
-		// Fetch users to populate user filter dropdown
-		const { users } = await userRepository.findAll({ limit: 1000 });
+		// Fetch logs and users in parallel
+		const [{ logs, totalCount }, { users }] = await Promise.all([
+			auditService.getLogs({
+				search,
+				userId,
+				action,
+				startDate,
+				endDate,
+				page,
+				limit
+			}),
+			userRepository.findAll({ limit: 1000 })
+		]);
 
 		return {
 			user: sessionUser,

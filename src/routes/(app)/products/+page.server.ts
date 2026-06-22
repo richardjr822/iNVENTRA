@@ -28,23 +28,23 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 	const limit = 10;
 
 	try {
-		// Load products
-		const { products, totalCount } = await productService.getProducts({
-			search,
-			categoryId,
-			status,
-			sortBy,
-			sortOrder,
-			page,
-			limit
-		});
-
-		// Load category list for filtering dropdown
-		const { categories } = await categoryService.getCategories({
-			limit: 100,
-			sortBy: 'name',
-			sortOrder: 'asc'
-		});
+		// Load products and category list in parallel
+		const [{ products, totalCount }, { categories }] = await Promise.all([
+			productService.getProducts({
+				search,
+				categoryId,
+				status,
+				sortBy,
+				sortOrder,
+				page,
+				limit
+			}),
+			categoryService.getCategories({
+				limit: 100,
+				sortBy: 'name',
+				sortOrder: 'asc'
+			})
+		]);
 
 		return {
 			user,
