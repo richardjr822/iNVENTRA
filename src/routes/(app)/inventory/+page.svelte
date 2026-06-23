@@ -466,12 +466,15 @@
 					</Button>
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger>
-							<Button
-								variant="secondary"
-								class="border border-border/60 hover:bg-muted font-bold text-xs h-9 shrink-0 cursor-pointer"
-							>
-								More Actions
-							</Button>
+							{#snippet child({ props })}
+								<Button
+									{...props}
+									variant="secondary"
+									class="border border-border/60 hover:bg-muted font-bold text-xs h-9 shrink-0 cursor-pointer"
+								>
+									More Actions
+								</Button>
+							{/snippet}
 						</DropdownMenu.Trigger>
 						<DropdownMenu.Content align="end" class="border-border/60 bg-card p-1">
 							<DropdownMenu.Item class="rounded-lg hover:bg-muted cursor-pointer">
@@ -716,14 +719,17 @@
 									{:else if cell.column.id === 'actions'}
 										<DropdownMenu.Root>
 											<DropdownMenu.Trigger>
-												<Button
-													variant="ghost"
-													size="icon"
-													class="h-8 w-8 p-0 hover:bg-muted cursor-pointer"
-												>
-													<MoreHorizontal class="h-4 w-4" />
-													<span class="sr-only">Open menu</span>
-												</Button>
+												{#snippet child({ props })}
+													<Button
+														{...props}
+														variant="ghost"
+														size="icon"
+														class="h-8 w-8 p-0 hover:bg-muted cursor-pointer"
+													>
+														<MoreHorizontal class="h-4 w-4" />
+														<span class="sr-only">Open menu</span>
+													</Button>
+												{/snippet}
 											</DropdownMenu.Trigger>
 											<DropdownMenu.Content align="end" class="border-border/60 bg-card p-1">
 												<DropdownMenu.Item

@@ -5,7 +5,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import { ArrowLeft, Loader2, Save, Upload, Plus, Trash2 } from '@lucide/svelte';
+	import { ArrowLeft, Loader2, Save, Upload, Plus, Trash2, Camera } from '@lucide/svelte';
 	import { toastService } from '$lib/services/toast.svelte';
 
 	let { data, form } = $props();
@@ -16,11 +16,23 @@
 	// References for focus
 	let nameInputRef = $state<HTMLInputElement | null>(null);
 	let fileInputRef = $state<HTMLInputElement | null>(null);
+	let cameraInputRef = $state<HTMLInputElement | null>(null);
 
 	// Form inputs (Product Name is first, status is always active, description is empty by default)
 	let name = $state('');
 	let description = $state('');
 	let imageUrl = $state<string | null>(null);
+
+	function handleCameraClick() {
+		cameraInputRef?.click();
+	}
+
+	function handleCameraSelect(e: Event) {
+		const target = e.target as HTMLInputElement;
+		if (target.files && target.files[0]) {
+			handleFileUpload(target.files[0]);
+		}
+	}
 
 	// Smart Default: Quantity: 1, Price: Empty
 	let variants = $state<{ quantity: string; price: string }[]>([
@@ -299,23 +311,37 @@
 							class="border-2 border-dashed border-neutral-200 dark:border-neutral-800 rounded-xl p-6 flex flex-col items-center justify-center text-center gap-3 bg-neutral-50/50 dark:bg-neutral-900/10 transition-colors hover:bg-neutral-100/50 dark:hover:bg-neutral-900/30"
 						>
 							<Upload class="h-6 w-6 text-muted-foreground" />
-							<div class="flex flex-col items-center gap-1.5">
-								<Button
-									id="photo-upload-trigger"
-									type="button"
-									variant="outline"
-									size="sm"
-									onclick={handleBrowseClick}
-									disabled={isUploading || loading}
-									class="h-9 px-4 font-semibold text-xs border-neutral-200 dark:border-neutral-800 hover:bg-muted active:scale-95 transition-all cursor-pointer"
-								>
-									{#if isUploading}
-										<Loader2 class="h-4 w-4 animate-spin mr-1.5 text-primary" />
-										<span>Uploading...</span>
-									{:else}
-										<span>Choose Photo</span>
-									{/if}
-								</Button>
+							<div class="flex flex-col items-center gap-3 w-full">
+								<div class="flex flex-wrap items-center justify-center gap-2">
+									<Button
+										id="photo-upload-trigger"
+										type="button"
+										variant="outline"
+										size="sm"
+										onclick={handleBrowseClick}
+										disabled={isUploading || loading}
+										class="h-9 px-4 font-semibold text-xs border-neutral-200 dark:border-neutral-800 hover:bg-muted active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+									>
+										{#if isUploading}
+											<Loader2 class="h-4 w-4 animate-spin text-primary" />
+											<span>Uploading...</span>
+										{:else}
+											<Upload class="h-4 w-4" />
+											<span>Choose Photo</span>
+										{/if}
+									</Button>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										onclick={handleCameraClick}
+										disabled={isUploading || loading}
+										class="h-9 px-4 font-semibold text-xs border-neutral-200 dark:border-neutral-800 hover:bg-muted active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+									>
+										<Camera class="h-4 w-4" />
+										<span>Take Photo</span>
+									</Button>
+								</div>
 								<p class="text-xs text-muted-foreground">Supported formats: JPG, JPEG, PNG, WEBP (Max 5MB)</p>
 							</div>
 						</div>
@@ -330,16 +356,28 @@
 									<p class="text-[11px] text-muted-foreground">Uploaded successfully</p>
 								</div>
 							</div>
-							<div class="flex gap-2">
+							<div class="flex flex-wrap gap-2">
 								<Button
 									type="button"
 									variant="outline"
 									size="sm"
 									onclick={handleBrowseClick}
 									disabled={isUploading || loading}
-									class="h-9 text-xs font-semibold hover:bg-muted cursor-pointer"
+									class="h-9 text-xs font-semibold hover:bg-muted cursor-pointer flex items-center gap-1.5"
 								>
-									Change Photo
+									<Upload class="h-3.5 w-3.5" />
+									<span>Choose Photo</span>
+								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									onclick={handleCameraClick}
+									disabled={isUploading || loading}
+									class="h-9 text-xs font-semibold hover:bg-muted cursor-pointer flex items-center gap-1.5"
+								>
+									<Camera class="h-3.5 w-3.5" />
+									<span>Take Photo</span>
 								</Button>
 								<Button
 									type="button"
@@ -361,6 +399,16 @@
 						class="hidden"
 						accept="image/jpeg, image/jpg, image/png, image/webp"
 						onchange={handleFileSelect}
+						disabled={isUploading || loading}
+					/>
+
+					<input
+						type="file"
+						bind:this={cameraInputRef}
+						class="hidden"
+						accept="image/*"
+						capture="environment"
+						onchange={handleCameraSelect}
 						disabled={isUploading || loading}
 					/>
 

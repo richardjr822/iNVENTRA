@@ -90,24 +90,27 @@
 
 <DropdownMenu.Root>
 	<DropdownMenu.Trigger>
-		<Button
-			variant="ghost"
-			class="relative flex h-10 w-full items-center gap-3 rounded-xl px-2.5 text-left hover:bg-muted/60 focus-visible:ring-emerald-500/50 cursor-pointer"
-			aria-label="Open user menu for {user.fullName}"
-		>
-			<div
-				class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-primary to-emerald-500 text-xs font-bold text-primary-foreground shadow-sm"
-				aria-hidden="true"
+		{#snippet child({ props })}
+			<Button
+				{...props}
+				variant="ghost"
+				class="relative flex h-10 items-center gap-3 rounded-xl px-2.5 text-left hover:bg-muted/60 focus-visible:ring-emerald-500/50 cursor-pointer"
+				aria-label="Open user menu for {user.fullName}"
 			>
-				{initials}
-			</div>
-			<div class="hidden flex-col text-left sm:flex max-w-[120px]">
-				<span class="truncate text-sm font-bold leading-none text-foreground">{user.fullName}</span>
-				<span class="truncate text-[10px] text-muted-foreground mt-0.5 leading-none"
-					>@{user.username}</span
+				<div
+					class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-primary to-emerald-500 text-xs font-bold text-primary-foreground shadow-sm"
+					aria-hidden="true"
 				>
-			</div>
-		</Button>
+					{initials}
+				</div>
+				<div class="hidden flex-col text-left sm:flex max-w-[140px]">
+					<span class="truncate text-sm font-bold leading-none text-foreground">{user.fullName}</span>
+					<span class="truncate text-[10px] text-muted-foreground mt-0.5 leading-none"
+						>@{user.username}</span
+					>
+				</div>
+			</Button>
+		{/snippet}
 	</DropdownMenu.Trigger>
 
 	<DropdownMenu.Content

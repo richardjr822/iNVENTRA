@@ -450,14 +450,17 @@
 									{:else if cell.column.id === 'actions'}
 										<DropdownMenu.Root>
 											<DropdownMenu.Trigger>
-												<Button
-													variant="ghost"
-													size="icon"
-													class="h-8 w-8 p-0 hover:bg-muted cursor-pointer"
-												>
-													<MoreHorizontal class="h-4 w-4" />
-													<span class="sr-only">Open menu</span>
-												</Button>
+												{#snippet child({ props })}
+													<Button
+														{...props}
+														variant="ghost"
+														size="icon"
+														class="h-8 w-8 p-0 hover:bg-muted cursor-pointer"
+													>
+														<MoreHorizontal class="h-4 w-4" />
+														<span class="sr-only">Open menu</span>
+													</Button>
+												{/snippet}
 											</DropdownMenu.Trigger>
 
 											<DropdownMenu.Content align="end" class="border-border/60 bg-card p-1">

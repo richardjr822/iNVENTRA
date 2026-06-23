@@ -40,7 +40,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 			const variantsResult = await sql`
 				SELECT id, product_id, quantity, price
 				FROM product_variants
-				WHERE product_id IN (${productIds})
+				WHERE product_id = ANY(${productIds})
 				ORDER BY quantity ASC;
 			`;
 			for (const v of variantsResult) {

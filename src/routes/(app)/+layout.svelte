@@ -84,7 +84,7 @@
 	);
 </script>
 
-<div class="relative min-h-screen bg-background text-foreground transition-colors duration-300">
+<div class="relative min-h-screen overflow-x-hidden bg-background text-foreground transition-colors duration-300">
 	<!-- Background grid overlay -->
 	<div
 		class="absolute inset-0 -z-20 bg-[linear-gradient(to_right,rgba(120,119,198,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(120,119,198,0.02)_1px,transparent_1px)] bg-[size:40px_40px] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.008)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.008)_1px,transparent_1px)]"
@@ -104,7 +104,7 @@
 	<AppSidebar {user} bind:mobileOpen />
 
 	<!-- Layout Content offsets right to make room for fixed desktop sidebar -->
-	<div class="flex min-h-screen flex-col lg:pl-64">
+	<div class="flex min-h-screen flex-col lg:ml-64 min-w-0">
 		<!-- Top header -->
 		<AppHeader {user} bind:mobileOpen />
 

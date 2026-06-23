@@ -83,7 +83,7 @@
 	class="sticky top-0 z-20 flex h-16 w-full items-center justify-between border-b border-border/60 bg-card/65 backdrop-blur-md px-4 sm:px-6 transition-all duration-300"
 >
 	<!-- Left Side: Hamburger & Breadcrumbs -->
-	<div class="flex items-center gap-3">
+	<div class="flex items-center gap-3 min-w-0 flex-1">
 		<!-- Mobile Hamburger Button -->
 		<Button
 			variant="outline"
@@ -127,7 +127,7 @@
 	</div>
 
 	<!-- Right Side: Command Palette hint, Theme & User Menu -->
-	<div class="flex items-center gap-2">
+	<div class="flex items-center gap-2 shrink-0">
 		<!-- Ctrl+K search hint (desktop only) -->
 		<button
 			type="button"
