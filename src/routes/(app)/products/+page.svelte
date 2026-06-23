@@ -22,7 +22,8 @@
 		Trash2,
 		Calendar,
 		LayoutGrid,
-		List
+		List,
+		Layers
 	} from '@lucide/svelte';
 	import type { Product } from '$lib/types';
 
@@ -158,6 +159,14 @@
 		</div>
 		{#if isManager}
 			<div class="flex flex-wrap gap-2.5">
+				<Button
+					href="/products/bulk"
+					variant="outline"
+					class="inline-flex items-center gap-2 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-background/50 hover:bg-muted px-5 py-3 text-sm font-bold text-foreground shadow-sm transition-all hover:shadow-md active:scale-95 cursor-pointer"
+				>
+					<Layers class="h-4.5 w-4.5 text-muted-foreground" aria-hidden="true" />
+					Bulk Add
+				</Button>
 				<Button
 					href="/products/create"
 					class="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground shadow-sm shadow-primary/20 transition-all hover:bg-primary/90 hover:shadow-md active:scale-95 cursor-pointer"

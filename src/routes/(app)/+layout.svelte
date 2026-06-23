@@ -21,6 +21,8 @@
 
 		if (toastParam === 'created') {
 			toastService.trigger('Category created successfully!', 'success');
+		} else if (toastParam === 'bulk_created') {
+			toastService.trigger('Products created successfully!', 'success');
 		} else if (toastParam === 'updated') {
 			toastService.trigger('Category updated successfully!', 'success');
 		} else if (toastParam === 'deleted') {
