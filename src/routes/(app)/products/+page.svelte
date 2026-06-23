@@ -344,9 +344,84 @@
 					{/each}
 				</div>
 			{:else}
-				<!-- List View (Tabled list view with no picture) -->
+				<!-- List View — responsive: cards on mobile, table on md+ -->
 				<div class="border border-neutral-200 dark:border-neutral-800 bg-card rounded-2xl overflow-hidden shadow-sm">
-					<div class="overflow-x-auto">
+
+					<!-- ── Mobile card list (< md) ──────────────────────────── -->
+					<div class="divide-y divide-neutral-200 dark:divide-neutral-800 md:hidden">
+						{#each data.products as product (product.id)}
+							<div class="p-4 flex flex-col gap-3 hover:bg-neutral-50/50 dark:hover:bg-neutral-900/10 transition-colors">
+
+								<!-- Top row: name + status badge -->
+								<div class="flex items-start justify-between gap-3">
+									<h3 class="font-extrabold text-base text-foreground leading-snug flex-1">{product.name}</h3>
+									{#if product.status === 'active'}
+										<Badge class="shrink-0 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-[9px] uppercase tracking-wider py-0.5 px-2">Active</Badge>
+									{:else}
+										<Badge class="shrink-0 bg-amber-500/10 text-amber-500 border border-amber-500/20 font-bold text-[9px] uppercase tracking-wider py-0.5 px-2">Inactive</Badge>
+									{/if}
+								</div>
+
+								<!-- Variants -->
+								<div>
+									<p class="text-[10px] font-black uppercase tracking-wider text-muted-foreground/70 mb-1.5">Selling Prices</p>
+									<div class="flex flex-wrap gap-1.5">
+										{#each product.variants || [] as variant}
+											<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-background text-xs">
+												<span class="text-muted-foreground font-semibold">{variant.quantity} {variant.quantity === 1 ? 'pc' : 'pcs'}</span>
+												<span class="text-muted-foreground">•</span>
+												<span class="font-bold text-emerald-600 dark:text-emerald-400">{phpFormat(variant.price)}</span>
+											</span>
+										{:else}
+											<span class="text-xs text-muted-foreground italic font-semibold">No variants set</span>
+										{/each}
+									</div>
+								</div>
+
+								<!-- Updated date -->
+								<div class="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground pt-1 border-t border-border/30">
+									<Calendar class="h-3 w-3 shrink-0" />
+									<span>Updated {formatRelativeTime(product.updated_at)}</span>
+								</div>
+
+								<!-- Actions row -->
+								<div class="flex items-center gap-1.5 flex-wrap">
+									<Button
+										href="/products/{product.id}"
+										variant="ghost"
+										size="sm"
+										class="h-8 px-2.5 text-xs font-bold text-muted-foreground hover:text-foreground cursor-pointer flex items-center gap-1"
+									>
+										<Eye class="h-3.5 w-3.5" />
+										<span>Details</span>
+									</Button>
+									{#if isManager}
+										<Button
+											href="/products/{product.id}/edit"
+											variant="outline"
+											size="icon"
+											class="h-8 w-8 border-border/50 hover:bg-muted cursor-pointer"
+											aria-label="Edit {product.name}"
+										>
+											<Edit2 class="h-3.5 w-3.5 text-muted-foreground" />
+										</Button>
+										<Button
+											onclick={() => openDeleteDialog(product)}
+											variant="outline"
+											size="icon"
+											class="h-8 w-8 border-border/50 hover:border-destructive/40 hover:bg-destructive/10 text-destructive cursor-pointer"
+											aria-label="Delete {product.name}"
+										>
+											<Trash2 class="h-3.5 w-3.5" />
+										</Button>
+									{/if}
+								</div>
+							</div>
+						{/each}
+					</div>
+
+					<!-- ── Desktop table (md+) ───────────────────────────────── -->
+					<div class="hidden md:block overflow-x-auto">
 						<table class="w-full border-collapse text-left">
 							<thead>
 								<tr class="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/10 text-xs font-bold text-muted-foreground tracking-wider uppercase">
@@ -362,41 +437,29 @@
 									<tr class="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/10 transition-colors">
 										<!-- Product Name -->
 										<td class="px-6 py-4">
-											<div class="font-extrabold text-foreground text-base leading-tight">
-												{product.name}
-											</div>
+											<div class="font-extrabold text-foreground text-base leading-tight">{product.name}</div>
 										</td>
 
 										<!-- Status -->
 										<td class="px-6 py-4">
 											{#if product.status === 'active'}
-												<Badge class="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-[9px] uppercase tracking-wider py-0.5 px-2">
-													Active
-												</Badge>
+												<Badge class="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-[9px] uppercase tracking-wider py-0.5 px-2">Active</Badge>
 											{:else}
-												<Badge class="bg-amber-500/10 text-amber-500 border border-amber-500/20 font-bold text-[9px] uppercase tracking-wider py-0.5 px-2">
-													Inactive
-												</Badge>
+												<Badge class="bg-amber-500/10 text-amber-500 border border-amber-500/20 font-bold text-[9px] uppercase tracking-wider py-0.5 px-2">Inactive</Badge>
 											{/if}
 										</td>
 
-										<!-- Selling Prices (horizontal variants list or clean badged list) -->
+										<!-- Selling Prices -->
 										<td class="px-6 py-4">
 											<div class="flex flex-wrap gap-2">
 												{#each product.variants || [] as variant}
 													<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-background text-xs">
-														<span class="text-muted-foreground font-semibold">
-															{variant.quantity} {variant.quantity === 1 ? 'pc' : 'pcs'}
-														</span>
+														<span class="text-muted-foreground font-semibold">{variant.quantity} {variant.quantity === 1 ? 'pc' : 'pcs'}</span>
 														<span class="text-muted-foreground">•</span>
-														<span class="font-bold text-emerald-600 dark:text-emerald-400">
-															{phpFormat(variant.price)}
-														</span>
+														<span class="font-bold text-emerald-600 dark:text-emerald-400">{phpFormat(variant.price)}</span>
 													</span>
 												{:else}
-													<span class="text-xs text-muted-foreground italic font-semibold">
-														No variants set
-													</span>
+													<span class="text-xs text-muted-foreground italic font-semibold">No variants set</span>
 												{/each}
 											</div>
 										</td>
@@ -406,7 +469,7 @@
 											{formatRelativeTime(product.updated_at)}
 										</td>
 
-										<!-- Actions (Table cell actions) -->
+										<!-- Actions -->
 										<td class="px-6 py-4 text-right whitespace-nowrap">
 											<div class="inline-flex items-center gap-1.5">
 												<Button
@@ -418,7 +481,6 @@
 													<Eye class="h-3.5 w-3.5" />
 													<span>Details</span>
 												</Button>
-
 												{#if isManager}
 													<Button
 														href="/products/{product.id}/edit"
@@ -429,7 +491,6 @@
 														<Edit2 class="h-3.5 w-3.5 text-muted-foreground" />
 														<span>Edit</span>
 													</Button>
-
 													<Button
 														onclick={() => openDeleteDialog(product)}
 														variant="outline"
@@ -447,8 +508,10 @@
 							</tbody>
 						</table>
 					</div>
+
 				</div>
 			{/if}
+
 		{:else}
 			<div class="flex flex-col items-center justify-center p-12 text-center rounded-2xl border border-dashed border-border/60 bg-card/45 shadow-sm min-h-[300px]">
 				<ShoppingBag class="h-12 w-12 text-muted-foreground/60 mb-4" />
